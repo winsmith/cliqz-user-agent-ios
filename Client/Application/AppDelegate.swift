@@ -11,6 +11,10 @@ import SDWebImage
 import LocalAuthentication
 import CoreSpotlight
 import UserNotifications
+import StoreKit
+#if DEBUG
+import FlipperKit
+#endif
 
 private let log = Logger.browserLogger
 
@@ -31,6 +35,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UIViewControllerRestorati
     var applicationCleanlyBackgrounded = true
     var shutdownWebServer: DispatchSourceTimer?
     var interceptorFeature: InterceptorFeature!
+    var humanWebFeature: HumanWebFeature!
+    var insightsFeature: InsightsFeature!
+    var useCases: UseCases!
 
     weak var application: UIApplication?
     var launchOptions: [AnyHashable: Any]?
@@ -56,14 +63,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UIViewControllerRestorati
             self.applicationCleanlyBackgrounded = defaults.bool(forKey: "ApplicationCleanlyBackgrounded")
         }
         defaults.set(false, forKey: "ApplicationCleanlyBackgrounded")
-        defaults.synchronize()
 
         // Hold references to willFinishLaunching parameters for delayed app launch
         self.application = application
         self.launchOptions = launchOptions
 
         self.window = UIWindow(frame: UIScreen.main.bounds)
-        self.window!.backgroundColor = UIColor.theme.browser.background
+
+        self.window!.backgroundColor = Theme.browser.background
 
         // If the 'Save logs to Files app on next launch' toggle
         // is turned on in the Settings app, copy over old logs.
@@ -115,13 +122,27 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UIViewControllerRestorati
         // Add restoration class, the factory that will return the ViewController we
         // will restore with.
 
+        setupRootViewController()
+
+        SystemUtils.onFirstRun()
+
+        log.info("startApplication end")
+        return true
+    }
+
+    private func setupRootViewController() {
         browserViewController = BrowserViewController(profile: self.profile!, tabManager: self.tabManager)
         browserViewController.edgesForExtendedLayout = []
 
         browserViewController.restorationIdentifier = NSStringFromClass(BrowserViewController.self)
         browserViewController.restorationClass = AppDelegate.self
 
-        self.interceptorFeature = InterceptorFeature(tabManager: self.tabManager, ui: self.browserViewController)
+        self.useCases = UseCases(tabManager: self.tabManager, profile: self.profile!, viewController: self.browserViewController)
+        self.interceptorFeature = InterceptorFeature(tabManager: self.tabManager, ui: self.browserViewController, useCases: self.useCases)
+        self.humanWebFeature = HumanWebFeature(tabManager: self.tabManager)
+        self.insightsFeature = InsightsFeature(tabManager: self.tabManager)
+
+        self.browserViewController.useCases = self.useCases
 
         let navigationController = UINavigationController(rootViewController: browserViewController)
         navigationController.delegate = self
@@ -130,13 +151,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UIViewControllerRestorati
         rootViewController = navigationController
 
         self.window!.rootViewController = rootViewController
-
-        SystemUtils.onFirstRun()
-
-        profile.cleanupHistoryIfNeeded()
-
-        log.info("startApplication end")
-        return true
     }
 
     func applicationWillTerminate(_ application: UIApplication) {
@@ -169,10 +183,26 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UIViewControllerRestorati
         return p
     }
 
+    #if DEBUG
+    private func setupFlipper(_ application: UIApplication) {
+        let client = FlipperClient.shared()
+        let layoutDescriptorMapper = SKDescriptorMapper(defaults: ())
+        FlipperKitLayoutComponentKitSupport.setUpWith(layoutDescriptorMapper)
+        client?.add(FlipperKitLayoutPlugin(rootNode: application, with: layoutDescriptorMapper!))
+        client?.add(FlipperKitNetworkPlugin(networkAdapter: SKIOSNetworkAdapter()))
+        client?.add(FKUserDefaultsPlugin(suiteName: AppInfo.sharedContainerIdentifier))
+        client?.add(FlipperKitReactPlugin())
+        client?.start()
+    }
+    #endif
+
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        #if DEBUG
+        self.setupFlipper(application)
+        #endif
         // Override point for customization after application launch.
         var shouldPerformAdditionalDelegateHandling = true
-
+        self.askForReview()
         UNUserNotificationCenter.current().delegate = self
         SentTabAction.registerActions()
         UIScrollView.doBadSwizzleStuff()
@@ -185,6 +215,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UIViewControllerRestorati
             Logger.browserLogger.deleteOldLogsDownToSizeLimit()
         }
 
+        QuickActions.sharedInstance.filterOutUnsupportedShortcutItems(application: application)
         // If a shortcut was launched, display its information and take the appropriate action
         if let shortcutItem = launchOptions?[UIApplication.LaunchOptionsKey.shortcutItem] as? UIApplicationShortcutItem {
 
@@ -211,28 +242,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UIViewControllerRestorati
         }
 
         DispatchQueue.main.async {
-            NavigationPath.handle(nav: routerpath, with: self.browserViewController)
+            NavigationPath.handle(nav: routerpath, with: BrowserViewController.foregroundBVC())
         }
         return true
-    }
-
-    @available(iOS 13.0, *)
-    private func matchInterfaceStyleWithSystemStyle() {
-        guard let prefs = self.profile?.prefs else {
-            return
-        }
-        switch UITraitCollection.current.userInterfaceStyle {
-        case .dark:
-            if ThemeManager.instance.currentName != .dark {
-                NightModeHelper.toggle(prefs, tabManager: self.tabManager)
-            }
-        case .light:
-            if ThemeManager.instance.currentName != .normal {
-                NightModeHelper.toggle(prefs, tabManager: self.tabManager)
-            }
-        case .unspecified: break
-        @unknown default: break
-        }
     }
 
     // We sync in the foreground only, to avoid the possibility of runaway resource usage.
@@ -245,7 +257,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UIViewControllerRestorati
             // Matching interface style in dispatch block because of iOS 13 bug.
             // UITraitCollection.current.userInterfaceStyle value is beeing updated with delay.
             DispatchQueue.main.async {
-                self.matchInterfaceStyleWithSystemStyle()
+                Theme.updateTheme(UITraitCollection.current.userInterfaceStyle)
             }
         }
 
@@ -256,7 +268,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UIViewControllerRestorati
 
         let defaults = UserDefaults()
         defaults.set(false, forKey: "ApplicationCleanlyBackgrounded")
-        defaults.synchronize()
 
         if let profile = self.profile {
             profile._reopen()
@@ -271,15 +282,31 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UIViewControllerRestorati
         application.applicationIconBadgeNumber = 0
 
         // Resume file downloads.
-        browserViewController.downloadQueue.resumeAll()
+        BrowserViewController.foregroundBVC().downloadQueue.resumeAll()
 
         // handle quick actions is available
         let quickActions = QuickActions.sharedInstance
         if let shortcut = quickActions.launchedShortcutItem {
             // dispatch asynchronously so that BVC is all set up for handling new tabs
             // when we try and open them
-            quickActions.handleShortCutItem(shortcut, withBrowserViewController: browserViewController)
+            quickActions.handleShortCutItem(shortcut, withBrowserViewController: BrowserViewController.foregroundBVC())
             quickActions.launchedShortcutItem = nil
+        }
+
+        // Delay these operations until after UIKit/UIApp init is complete
+        // - LeanPlum does heavy disk access during init, delay this
+        // - loadQueuedTabs accesses the DB and shows up as a hot path in profiling
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            // We could load these here, but then we have to futz with the tab counter
+            // and making NSURLRequests.
+            self.browserViewController.loadQueuedTabs(receivedURLs: self.receivedURLs)
+            self.receivedURLs.removeAll()
+            application.applicationIconBadgeNumber = 0
+        }
+
+        // Cleanup can be a heavy operation, take it out of the startup path. Instead check after a few seconds.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
+            self.profile?.cleanupHistoryIfNeeded()
         }
     }
 
@@ -292,10 +319,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UIViewControllerRestorati
 
         let defaults = UserDefaults()
         defaults.set(true, forKey: "ApplicationCleanlyBackgrounded")
-        defaults.synchronize()
 
         // Pause file downloads.
-        browserViewController.downloadQueue.pauseAll()
+        BrowserViewController.foregroundBVC().downloadQueue.pauseAll()
 
         syncOnDidEnterBackground(application: application)
 
@@ -372,23 +398,57 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UIViewControllerRestorati
     }
 
     fileprivate func setUserAgent() {
-        let firefoxUA = UserAgent.defaultUserAgent()
+        let firefoxUA = UserAgent.getUserAgent()
 
         // Set the UA for WKWebView (via defaults), the favicon fetcher, and the image loader.
         // This only needs to be done once per runtime. Note that we use defaults here that are
         // readable from extensions, so they can just use the cached identifier.
-        let defaults = UserDefaults(suiteName: AppInfo.sharedContainerIdentifier)!
-        defaults.register(defaults: ["UserAgent": firefoxUA])
 
         SDWebImageDownloader.shared.setValue(firefoxUA, forHTTPHeaderField: "User-Agent")
         //SDWebImage is setting accept headers that report we support webp. We don't
         SDWebImageDownloader.shared.setValue("image/*;q=0.8", forHTTPHeaderField: "Accept")
     }
 
+    private func shouldAskForReview() -> Bool {
+        let dateformat = DateFormatter()
+        dateformat.dateFormat = "yyyyMMdd"
+        let today = dateformat.string(from: Date())
+        guard UserAgentConstants.installDate != today else {
+            self.profile?.prefs.setBool(false, forKey: PrefsKeys.ShowAppReview)
+            return false
+        }
+        guard let showAppReview = self.profile?.prefs.boolForKey(PrefsKeys.ShowAppReview), showAppReview else {
+            return false
+        }
+        self.profile?.prefs.setBool(false, forKey: PrefsKeys.ShowAppReview)
+        #if DEBUG
+            return true
+        #else
+            let random = Int.random(in: 1...100)
+            guard random <= 5 else {
+                return false
+            }
+            return true
+        #endif
+    }
+
+    private func askForReview() {
+        guard self.shouldAskForReview() else {
+            return
+        }
+        SKStoreReviewController.requestReview()
+    }
+
     func application(_ application: UIApplication, continue userActivity: NSUserActivity, restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void) -> Bool {
-        if #available(iOS 12.0, *) {
-            if userActivity.activityType == SiriShortcuts.activityType.openURL.rawValue {
-                browserViewController.openBlankNewTab(focusLocationField: false)
+        let bvc = BrowserViewController.foregroundBVC()
+        if #available(iOS 12.0, *), let activityType = SiriActivityTypes(rawValue: userActivity.activityType) {
+            switch activityType {
+            case .openURL:
+                bvc.openBlankNewTab(focusLocationField: false)
+                return true
+            case .searchWith:
+                let query = userActivity.userInfo?["query"] as? String
+                bvc.showSearchInNewTab(query: query)
                 return true
             }
         }
@@ -397,16 +457,15 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UIViewControllerRestorati
         // reached via a "Spotlight" search before we began indexing visited pages via CoreSpotlight.
         if let url = userActivity.webpageURL {
             let query = url.getQuery()
-
             // Per Adjust documenation, https://docs.adjust.com/en/universal-links/#running-campaigns-through-universal-links,
             // it is recommended that links contain the `deep_link` query parameter. This link will also
             // be url encoded.
             if let deepLink = query["deep_link"]?.removingPercentEncoding, let url = URL(string: deepLink) {
-                browserViewController.switchToTabForURLOrOpen(url, isPrivileged: true)
+                bvc.switchToTabForURLOrOpen(url, isPrivileged: true)
                 return true
             }
 
-            browserViewController.switchToTabForURLOrOpen(url, isPrivileged: true)
+            bvc.switchToTabForURLOrOpen(url, isPrivileged: true)
             return true
         }
 
@@ -416,7 +475,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UIViewControllerRestorati
             if let userInfo = userActivity.userInfo,
                 let urlString = userInfo[CSSearchableItemActivityIdentifier] as? String,
                 let url = URL(string: urlString) {
-                browserViewController.switchToTabForURLOrOpen(url, isPrivileged: true)
+                bvc.switchToTabForURLOrOpen(url, isPrivileged: true)
                 return true
             }
         }
@@ -433,14 +492,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UIViewControllerRestorati
         }
 
         // Check if the app is foregrounded, _also_ verify the BVC is initialized. Most BVC functions depend on viewDidLoad() having run –if not, they will crash.
-        if UIApplication.shared.applicationState == .active && browserViewController.isViewLoaded {
-            browserViewController.loadQueuedTabs(receivedURLs: receivedURLs)
+        if UIApplication.shared.applicationState == .active && BrowserViewController.foregroundBVC().isViewLoaded {
+            BrowserViewController.foregroundBVC().loadQueuedTabs(receivedURLs: receivedURLs)
             receivedURLs.removeAll()
         }
     }
 
     func application(_ application: UIApplication, performActionFor shortcutItem: UIApplicationShortcutItem, completionHandler: @escaping (Bool) -> Void) {
-        let handledShortCutItem = QuickActions.sharedInstance.handleShortCutItem(shortcutItem, withBrowserViewController: browserViewController)
+        let handledShortCutItem = QuickActions.sharedInstance.handleShortCutItem(shortcutItem, withBrowserViewController: BrowserViewController.foregroundBVC())
 
         completionHandler(handledShortCutItem)
     }
@@ -522,7 +581,7 @@ extension AppDelegate {
                 // If we're in the foreground, load the queued tabs now.
                 if application.applicationState == .active {
                     DispatchQueue.main.async {
-                        self.browserViewController.loadQueuedTabs(receivedURLs: self.receivedURLs)
+                        BrowserViewController.foregroundBVC().loadQueuedTabs(receivedURLs: self.receivedURLs)
                         self.receivedURLs.removeAll()
                     }
                 }
@@ -541,8 +600,7 @@ extension AppDelegate {
 extension UIApplication {
 
     static var isInPrivateMode: Bool {
-        let appDelegate = UIApplication.shared.delegate as? AppDelegate
-        return appDelegate?.browserViewController.tabManager.selectedTab?.isPrivate ?? false
+        return BrowserViewController.foregroundBVC().tabManager.selectedTab?.isPrivate ?? false
     }
 }
 
@@ -562,7 +620,7 @@ enum SentTabAction: String {
     static let TabSendCategory = "TabSendCategory"
 
     static func registerActions() {
-        let viewAction = UNNotificationAction(identifier: SentTabAction.view.rawValue, title: Strings.SentTabViewActionTitle, options: .foreground)
+        let viewAction = UNNotificationAction(identifier: SentTabAction.view.rawValue, title: Strings.SentTab.ViewAction.Title, options: .foreground)
 
         // Register ourselves to handle the notification category set by NotificationService for APNS notifications
         let sentTabCategory = UNNotificationCategory(identifier: "org.mozilla.ios.SentTab.placeholder", actions: [viewAction], intentIdentifiers: [], options: UNNotificationCategoryOptions(rawValue: 0))

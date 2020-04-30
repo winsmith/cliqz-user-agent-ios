@@ -15,7 +15,7 @@ class SiriSettingsViewController: SettingsTableViewController {
         self.prefs = prefs
         super.init(style: .grouped)
 
-        self.title = Strings.SettingsSiriSectionName
+        self.title = Strings.Settings.Siri.SectionName
         hasSectionSeparatorLine = false
     }
 
@@ -25,7 +25,8 @@ class SiriSettingsViewController: SettingsTableViewController {
 
     override func generateSettings() -> [SettingSection] {
         let setting = SiriOpenURLSetting(settings: self)
-        let firstSection = SettingSection(title: nil, footerTitle: NSAttributedString(string: Strings.SettingsSiriSectionDescription), children: [setting])
+        let searchWithQliqzSetting = SiriSearchWithQliqzSetting(settings: self)
+        let firstSection = SettingSection(title: nil, footerTitle: NSAttributedString(string: Strings.Settings.Siri.SectionDescription), children: [setting, searchWithQliqzSetting])
         return [firstSection]
     }
 }
@@ -37,12 +38,29 @@ class SiriOpenURLSetting: Setting {
     override var accessibilityIdentifier: String? { return "SiriSettings" }
 
     init(settings: SettingsTableViewController) {
-        super.init(title: NSAttributedString(string: Strings.SettingsSiriOpenURL, attributes: [NSAttributedString.Key.foregroundColor: UIColor.theme.tableView.rowText]))
+        super.init(title: NSAttributedString(string: Strings.Settings.Siri.OpenURL, attributes: [NSAttributedString.Key.foregroundColor: Theme.tableView.rowText]))
     }
 
     override func onClick(_ navigationController: UINavigationController?) {
         if let vc = navigationController?.topViewController {
-            SiriShortcuts.manageSiri(for: SiriShortcuts.activityType.openURL, in: vc)
+            SiriShortcuts.manageSiri(for: SiriActivityTypes.openURL, in: vc)
+        }
+    }
+}
+
+@available(iOS 12.0, *)
+class SiriSearchWithQliqzSetting: Setting {
+    override var accessoryType: UITableViewCell.AccessoryType { return .disclosureIndicator }
+
+    override var accessibilityIdentifier: String? { return "SiriSearchWithQliqzSetting" }
+
+    init(settings: SettingsTableViewController) {
+        super.init(title: NSAttributedString(string: Strings.Settings.Siri.SearchWith + AppInfo.displayName, attributes: [NSAttributedString.Key.foregroundColor: Theme.tableView.rowText]))
+    }
+
+    override func onClick(_ navigationController: UINavigationController?) {
+        if let vc = navigationController?.topViewController {
+            SiriShortcuts.manageSiri(for: SiriActivityTypes.searchWith, in: vc)
         }
     }
 }

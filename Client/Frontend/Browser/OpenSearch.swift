@@ -37,7 +37,7 @@ class OpenSearchEngine: NSObject, NSCoding {
         // http://stackoverflow.com/a/40034694
         let isCustomEngine = aDecoder.decodeAsBool(forKey: "isCustomEngine")
         guard let searchTemplate = aDecoder.decodeObject(forKey: "searchTemplate") as? String,
-              let shortName = aDecoder.decodeObject(forKey: "shortName") as? String else {
+            let shortName = aDecoder.decodeObject(forKey: "shortName") as? String else {
                 assertionFailure()
                 return nil
         }
@@ -73,12 +73,23 @@ class OpenSearchEngine: NSObject, NSCoding {
         // and have to do flaky pattern matching instead.
         let placeholder = "PLACEHOLDER"
         let template = searchTemplate.replacingOccurrences(of: SearchTermComponent, with: placeholder)
-        let components = URLComponents(string: template)
-        let searchTerm = components?.queryItems?.filter { item in
+        var components = URLComponents(string: template)
+
+        if let retVal = extractQueryArg(in: components?.queryItems, for: placeholder) {
+            return retVal
+        } else {
+            // Query arg may be exist inside fragment
+            components = URLComponents()
+            components?.query = URL(string: template)?.fragment
+            return extractQueryArg(in: components?.queryItems, for: placeholder)
+        }
+    }
+
+    fileprivate func extractQueryArg(in queryItems: [URLQueryItem]?, for placeholder: String) -> String? {
+        let searchTerm = queryItems?.filter { item in
             return item.value == placeholder
         }
-        guard let term = searchTerm, !term.isEmpty  else { return nil }
-        return term[0].name
+        return searchTerm?.first?.name
     }
 
     /**
@@ -95,13 +106,18 @@ class OpenSearchEngine: NSObject, NSCoding {
      * Returns the query that was used to construct a given search URL
      **/
     func queryForSearchURL(_ url: URL?) -> String? {
-        if isSearchURLForEngine(url) {
-            if let key = searchQueryComponentKey,
-                let value = url?.getQuery()[key] {
-                return value.replacingOccurrences(of: "+", with: " ").removingPercentEncoding
-            }
+        guard isSearchURLForEngine(url), let key = searchQueryComponentKey else { return nil }
+
+        if let value = url?.getQuery()[key] {
+            return value.replacingOccurrences(of: "+", with: " ").removingPercentEncoding
+        } else {
+            // If search term could not found in query, it may be exist inside fragment
+            var components = URLComponents()
+            components.query = url?.fragment?.removingPercentEncoding
+
+            guard let value = components.url?.getQuery()[key] else { return nil }
+            return value.replacingOccurrences(of: "+", with: " ").removingPercentEncoding
         }
-        return nil
     }
 
     /**
@@ -236,6 +252,7 @@ class OpenSearchParser {
             print("Search engine must have a text/html type")
             return nil
         }
+
         return OpenSearchEngine(engineID: engineID, shortName: shortName, searchTemplate: searchTemplate, suggestTemplate: suggestTemplate, isCustomEngine: false)
     }
 }

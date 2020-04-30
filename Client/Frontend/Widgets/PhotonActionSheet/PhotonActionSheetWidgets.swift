@@ -22,8 +22,12 @@ struct PhotonActionSheetUX {
     static let SiteHeaderName  = "PhotonActionSheetSiteHeaderView"
     static let TitleHeaderName = "PhotonActionSheetTitleHeaderView"
     static let CellName = "PhotonActionSheetCell"
+    static let CollectionCellName = "PhotonActionSheetCollectionCell"
     static let CloseButtonHeight: CGFloat  = 56
     static let TablePadding: CGFloat = 6
+    static let SeparatorRowHeight: CGFloat = 13
+    static let TitleHeaderSectionHeight: CGFloat = 40
+    static let TitleHeaderSectionHeightWithSite: CGFloat = 70
 }
 
 public enum PresentationStyle {
@@ -37,6 +41,7 @@ public enum PhotonActionSheetCellAccessoryType {
     case Switch
     case Text
     case Sync // Sync is a special case.
+    case Remove
     case None
 }
 
@@ -67,13 +72,21 @@ public struct PhotonActionSheetItem {
     public fileprivate(set) var tabCount: String?
     public fileprivate(set) var handler: ((PhotonActionSheetItem) -> Void)?
     public fileprivate(set) var badgeIconName: String?
-    public private(set) var customView: UIView?
+    public fileprivate(set) var customView: PhotonCustomViewCellContent?
+    public fileprivate(set) var collectionItems: [PhotonActionSheetItem]?
+
+    // Enable title customization beyond what the interface provides,
+    public var customRender: ((_ title: UILabel, _ contentView: UIView) -> Void)?
+
+    // Enable height customization
+    public var customHeight: ((PhotonActionSheetItem) -> CGFloat)?
+
+    public var didRemoveHandler: ((PhotonActionSheetItem) -> Void)?
 
     init(title: String, text: String? = nil, iconString: String? = nil, iconURL: URL? = nil, iconType: PhotonActionSheetIconType = .Image,
          iconAlignment: IconAlignment = .left, isEnabled: Bool = false, accessory: PhotonActionSheetCellAccessoryType = .None,
          accessoryText: String? = nil, badgeIconNamed: String? = nil, bold: Bool? = false, tabCount: String? = nil,
-         customView: UIView? = nil, handler: ((PhotonActionSheetItem) -> Void)? = nil) {
-
+         customView: PhotonCustomViewCellContent? = nil, collectionItems: [PhotonActionSheetItem]? = nil, handler: ((PhotonActionSheetItem) -> Void)? = nil) {
         self.title = title
         self.iconString = iconString
         self.iconURL = iconURL
@@ -88,17 +101,18 @@ public struct PhotonActionSheetItem {
         self.tabCount = tabCount
         self.badgeIconName = badgeIconNamed
         self.customView = customView
+        self.collectionItems = collectionItems
     }
 }
 
 class PhotonActionSheetTitleHeaderView: UITableViewHeaderFooterView, Themeable {
-    static let Padding: CGFloat = 12
+    static let Padding: CGFloat = 18
 
     lazy var titleLabel: UILabel = {
         let titleLabel = UILabel()
         titleLabel.font = DynamicFontHelper.defaultHelper.SmallSizeRegularWeightAS
         titleLabel.numberOfLines = 1
-        titleLabel.textColor = UIColor.theme.tableView.headerTextLight
+        titleLabel.textColor = Theme.tableView.headerTextLight
         return titleLabel
     }()
 
@@ -140,7 +154,7 @@ class PhotonActionSheetTitleHeaderView: UITableViewHeaderFooterView, Themeable {
     }
 
     func applyTheme() {
-        self.titleLabel.textColor = UIColor.theme.tableView.headerTextLight
+        self.titleLabel.textColor = Theme.tableView.headerTextLight
     }
 
     override func prepareForReuse() {
@@ -214,6 +228,8 @@ class PhotonActionSheetSiteHeaderView: UITableViewHeaderFooterView {
         self.logoView.url = site.url
         self.titleLabel.text = site.title.isEmpty ? site.url : site.title
         self.descriptionLabel.text = site.tileURL.baseDomain
+        self.titleLabel.textColor = Theme.actionMenu.foreground
+        self.descriptionLabel.textColor = Theme.actionMenu.foreground
     }
 }
 
@@ -225,7 +241,7 @@ class PhotonActionSheetSeparator: UITableViewHeaderFooterView, Themeable {
         super.init(reuseIdentifier: reuseIdentifier)
         self.backgroundView = UIView()
         self.backgroundView?.backgroundColor = .clear
-        separatorLineView.backgroundColor = UIColor.theme.actionMenu.separatorColor
+        separatorLineView.backgroundColor = Theme.actionMenu.separatorColor
         self.contentView.addSubview(separatorLineView)
         separatorLineView.snp.makeConstraints { make in
             make.leading.trailing.equalTo(self)
@@ -239,7 +255,7 @@ class PhotonActionSheetSeparator: UITableViewHeaderFooterView, Themeable {
     }
 
     func applyTheme() {
-        self.separatorLineView.backgroundColor = UIColor.theme.actionMenu.separatorColor
+        self.separatorLineView.backgroundColor = Theme.actionMenu.separatorColor
     }
 
 }

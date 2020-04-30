@@ -14,10 +14,13 @@ import Shared
 class MockableHistory: BrowserHistory, SyncableHistory {
     func getFrecentHistory() -> FrecentHistory { fatalError() }
     func getTopSitesWithLimit(_ limit: Int) -> Deferred<Maybe<Cursor<Site>>> { fatalError() }
+    func getDomainProtocol(_ domainName: String) -> Deferred<Maybe<String>> { fatalError() }
     func addLocalVisit(_ visit: SiteVisit) -> Success { fatalError() }
     func clearHistory() -> Success { fatalError() }
+    func clearSearchHistory() -> Success { fatalError() }
     func removeHistoryFromDate(_ date: Date) -> Success { fatalError() }
     func removeHistoryForURL(_ url: String) -> Success { fatalError() }
+    func removeAllTracesForDomain(_ url: String) -> Success { fatalError() }
     func removeSiteFromTopSites(_ site: Site) -> Success { fatalError() }
     func removeHostFromTopSites(_ host: String) -> Success { fatalError() }
     func clearTopSitesCache() -> Success { fatalError() }
@@ -25,7 +28,8 @@ class MockableHistory: BrowserHistory, SyncableHistory {
     func isPinnedTopSite(_ url: String) -> Deferred<Maybe<Bool>> { fatalError()}
     func addPinnedTopSite(_ site: Site) -> Success { fatalError() }
     func getPinnedTopSites() -> Deferred<Maybe<Cursor<Site>>> { fatalError() }
-    func getSitesByLastVisit(limit: Int, offset: Int) -> Deferred<Maybe<Cursor<Site>>> { fatalError() }
+    func getSitesByLastVisit(limit: Int, offset: Int, domainName: String?) -> Deferred<Maybe<Cursor<Site>>> { fatalError() }
+    func getDomainsByLastVisit(limit: Int, offset: Int) -> Deferred<Maybe<Cursor<Domain>>> { fatalError() }
     func setTopSitesNeedsInvalidation() { fatalError() }
     func updateTopSitesCacheIfInvalidated() -> Deferred<Maybe<Bool>> { fatalError() }
     func setTopSitesCacheSize(_ size: Int32) { fatalError() }
@@ -40,5 +44,6 @@ class MockableHistory: BrowserHistory, SyncableHistory {
     func doneApplyingRecordsAfterDownload() -> Success { fatalError() }
     func doneUpdatingMetadataAfterUpload() -> Success { fatalError() }
     func hasSyncedHistory() -> Deferred<Maybe<Bool>> { fatalError() }
+    func clearPinnedSitesCache() -> Success { fatalError() }
 }
 

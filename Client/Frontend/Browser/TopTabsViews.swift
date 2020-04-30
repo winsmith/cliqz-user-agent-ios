@@ -13,7 +13,7 @@ struct TopTabsSeparatorUX {
 class TopTabsSeparator: UICollectionReusableView {
     override init(frame: CGRect) {
         super.init(frame: frame)
-        self.backgroundColor = UIColor.theme.topTabs.separator
+        self.backgroundColor = Theme.topTabs.separator
     }
 
     required init?(coder aDecoder: NSCoder) {
@@ -27,7 +27,7 @@ class TopTabsHeaderFooter: UICollectionReusableView {
         super.init(frame: frame)
         line.semanticContentAttribute = .forceLeftToRight
         addSubview(line)
-        line.backgroundColor = UIColor.theme.topTabs.separator
+        line.backgroundColor = Theme.topTabs.separator
     }
 
     func arrangeLine(_ kind: String) {
@@ -67,9 +67,9 @@ class TopTabCell: UICollectionViewCell {
 
     var selectedTab = false {
         didSet {
-            backgroundColor = selectedTab ? UIColor.theme.topTabs.tabBackgroundSelected : UIColor.theme.topTabs.tabBackgroundUnselected
-            titleText.textColor = selectedTab ? UIColor.theme.topTabs.tabForegroundSelected : UIColor.theme.topTabs.tabForegroundUnselected
-            closeButton.tintColor = selectedTab ? UIColor.theme.topTabs.closeButtonSelectedTab : UIColor.theme.topTabs.closeButtonUnselectedTab
+            backgroundColor = selectedTab ? Theme.topTabs.tabBackgroundSelected : Theme.topTabs.tabBackgroundUnselected
+            titleText.textColor = selectedTab ? Theme.topTabs.tabForegroundSelected : Theme.topTabs.tabForegroundUnselected
+            closeButton.tintColor = selectedTab ? Theme.topTabs.closeButtonSelectedTab : Theme.topTabs.closeButtonUnselectedTab
             closeButton.backgroundColor = .clear
             closeButton.layer.shadowColor = backgroundColor?.cgColor
             if selectedTab {
@@ -145,16 +145,16 @@ class TopTabCell: UICollectionViewCell {
 
         if tab.displayTitle.isEmpty {
             if let url = tab.webView?.url, let internalScheme = InternalURL(url) {
-                self.titleText.text = Strings.AppMenuNewTabTitleString
+                self.titleText.text = Strings.Menu.NewTabTitleString
                 self.accessibilityLabel = internalScheme.aboutComponent
             } else {
                 self.titleText.text = tab.webView?.url?.absoluteDisplayString
             }
 
-            self.closeButton.accessibilityLabel = String(format: Strings.TopSitesRemoveButtonAccessibilityLabel, self.titleText.text ?? "")
+            self.closeButton.accessibilityLabel = String(format: Strings.TopSites.RemoveButtonAccessibilityLabel, self.titleText.text ?? "")
         } else {
             self.accessibilityLabel = tab.displayTitle
-            self.closeButton.accessibilityLabel = String(format: Strings.TopSitesRemoveButtonAccessibilityLabel, tab.displayTitle)
+            self.closeButton.accessibilityLabel = String(format: Strings.TopSites.RemoveButtonAccessibilityLabel, tab.displayTitle)
         }
 
         self.selectedTab = isSelected

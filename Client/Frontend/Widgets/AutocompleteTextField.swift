@@ -11,10 +11,11 @@ import Shared
 /// callers must use this instead.
 protocol AutocompleteTextFieldDelegate: AnyObject {
     func autocompleteTextField(_ autocompleteTextField: AutocompleteTextField, didEnterText text: String)
-    func autocompleteTextFieldShouldReturn(_ autocompleteTextField: AutocompleteTextField) -> Bool
+    func autocompleteTextFieldShouldReturn(_ autocompleteTextField: AutocompleteTextField, completion: String?) -> Bool
     func autocompleteTextFieldShouldClear(_ autocompleteTextField: AutocompleteTextField) -> Bool
     func autocompleteTextFieldDidCancel(_ autocompleteTextField: AutocompleteTextField)
     func autocompletePasteAndGo(_ autocompleteTextField: AutocompleteTextField)
+    func autocompleteDidEndEditing(_ autocompleteTextField: AutocompleteTextField)
 }
 
 class AutocompleteTextField: UITextField, UITextFieldDelegate {
@@ -234,7 +235,7 @@ class AutocompleteTextField: UITextField, UITextFieldDelegate {
         label.textAlignment = .left
 
         let enteredTextSize = self.attributedText?.boundingRect(with: self.frame.size, options: NSStringDrawingOptions.usesLineFragmentOrigin, context: nil)
-        frame.origin.x = (enteredTextSize?.width.rounded() ?? 0)
+        frame.origin = CGPoint(x: (enteredTextSize?.width.rounded() ?? 0), y: -0.5)
         let defaultCancelButtonWidth: CGFloat = (self.clearButtonMode == .whileEditing) ? 20 : 0
         frame.size.width = self.frame.size.width - frame.origin.x - defaultCancelButtonWidth
         frame.size.height = self.frame.size.height - 1
@@ -248,13 +249,18 @@ class AutocompleteTextField: UITextField, UITextFieldDelegate {
     }
 
     func textFieldShouldReturn(_ textField: UITextField) -> Bool {
+        let completion = self.autocompleteTextLabel?.text
         applyCompletion()
-        return autocompleteDelegate?.autocompleteTextFieldShouldReturn(self) ?? true
+        return autocompleteDelegate?.autocompleteTextFieldShouldReturn(self, completion: completion) ?? true
     }
 
     func textFieldShouldClear(_ textField: UITextField) -> Bool {
         removeCompletion()
         return autocompleteDelegate?.autocompleteTextFieldShouldClear(self) ?? true
+    }
+
+    func textFieldDidEndEditing(_ textField: UITextField) {
+        self.autocompleteDelegate?.autocompleteDidEndEditing(self)
     }
 
     override func setMarkedText(_ markedText: String?, selectedRange: NSRange) {
@@ -311,7 +317,7 @@ class AutocompleteTextField: UITextField, UITextFieldDelegate {
 extension AutocompleteTextField: MenuHelperInterface {
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
         if action == MenuHelper.SelectorPasteAndGo {
-            return UIPasteboard.general.hasStrings
+            return UIPasteboard.general.isCopiedStringValidURL
         }
 
         return super.canPerformAction(action, withSender: sender)

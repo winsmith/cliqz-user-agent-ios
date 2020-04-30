@@ -10,6 +10,7 @@ import XCGLogger
 
 private let log = Logger.browserLogger
 class TabManagerStore {
+
     fileprivate var lockedForReading = false
     fileprivate let imageStore: DiskImageStore?
     fileprivate var fileManager = FileManager.default
@@ -115,8 +116,17 @@ class TabManagerStore {
     }
 
     func restoreStartupTabs(clearPrivateTabs: Bool, tabManager: TabManager) -> Tab? {
-        let selectedTab = restoreTabs(savedTabs: archivedStartupTabs, clearPrivateTabs: clearPrivateTabs, tabManager: tabManager)
-        archivedStartupTabs.removeAll()
+        var selectedTab = self.restoreTabs(savedTabs: archivedStartupTabs, clearPrivateTabs: clearPrivateTabs, tabManager: tabManager)
+        switch tabManager.startTab {
+        case .lastOpenedTab: break
+        case .newTab:
+            if !(selectedTab?.isPureNewTabPage ?? false) {
+                self.lockedForReading = true
+                selectedTab = tabManager.tabs.first(where: { $0.isPureNewTabPage }) ?? tabManager.addTab()
+                self.lockedForReading = false
+            }
+        }
+        self.archivedStartupTabs.removeAll()
         return selectedTab
     }
 
@@ -135,6 +145,15 @@ class TabManagerStore {
 
         var tabToSelect: Tab?
         for savedTab in savedTabs {
+            // Don't restore tabs with file url
+            if let sessionData = savedTab.sessionData, sessionData.urls.contains(where: { $0.isFileURL }) {
+                var urls = sessionData.urls
+                urls.removeAll(where: { $0.isFileURL })
+                if urls.isEmpty {
+                    continue
+                }
+                savedTab.sessionData = SessionData(currentPage: sessionData.currentPage, urls: urls, lastUsedTime: sessionData.lastUsedTime)
+            }
             // Provide an empty request to prevent a new tab from loading the home screen
             var tab = tabManager.addTab(flushToDisk: false, zombie: true, isPrivate: savedTab.isPrivate)
             tab = savedTab.configureSavedTabUsing(tab, imageStore: imageStore)

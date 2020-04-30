@@ -31,11 +31,13 @@ class ClearPrivateDataTableViewController: ThemedTableViewController {
     fileprivate lazy var clearables: [(clearable: Clearable, checked: DefaultCheckedState)] = {
         var items: [(clearable: Clearable, checked: DefaultCheckedState)] = [
             (HistoryClearable(profile: self.profile), true),
+            (SearchHistoryClearable(profile: self.profile), true),
             (CacheClearable(tabManager: self.tabManager), true),
             (CookiesClearable(tabManager: self.tabManager), true),
             (SiteDataClearable(tabManager: self.tabManager), true),
             (TrackingProtectionClearable(), true),
             (DownloadedFilesClearable(), false), // Don't clear downloaded files by default
+            (PrivacyStatsClearable(), false),
         ]
         return items
     }()
@@ -52,14 +54,14 @@ class ClearPrivateDataTableViewController: ThemedTableViewController {
 
     fileprivate var clearButtonEnabled = true {
         didSet {
-            clearButton?.textLabel?.textColor = clearButtonEnabled ? UIColor.theme.general.destructiveRed : UIColor.theme.tableView.disabledRowText
+            clearButton?.textLabel?.textColor = clearButtonEnabled ? Theme.general.destructiveRed : Theme.tableView.disabledRowText
         }
     }
 
     override func viewDidLoad() {
         super.viewDidLoad()
 
-        title = Strings.SettingsDataManagementTitle
+        title = Strings.Settings.DataManagement.Title
 
         tableView.register(ThemedTableSectionHeaderFooterView.self, forHeaderFooterViewReuseIdentifier: SectionHeaderFooterIdentifier)
 
@@ -74,13 +76,13 @@ class ClearPrivateDataTableViewController: ThemedTableViewController {
 
         if indexPath.section == SectionArrow {
             cell.accessoryType = .disclosureIndicator
-            cell.textLabel?.text = Strings.SettingsWebsiteDataTitle
+            cell.titleLabel.text = Strings.Settings.WebsiteData.Title
             cell.accessibilityIdentifier = "WebsiteData"
             clearButton = cell
         } else if indexPath.section == SectionToggles {
-            cell.textLabel?.text = clearables[indexPath.item].clearable.label
+            cell.titleLabel.text = clearables[indexPath.item].clearable.label
             let control = UISwitchThemed()
-            control.onTintColor = UIColor.theme.tableView.controlTint
+            control.onTintColor = Theme.tableView.controlTint
             control.addTarget(self, action: #selector(switchValueChanged), for: .valueChanged)
             control.isOn = toggles[indexPath.item]
             cell.accessoryView = control
@@ -88,9 +90,9 @@ class ClearPrivateDataTableViewController: ThemedTableViewController {
             control.tag = indexPath.item
         } else {
             assert(indexPath.section == SectionButton)
-            cell.textLabel?.text = Strings.SettingsClearPrivateDataClearButton
-            cell.textLabel?.textAlignment = .center
-            cell.textLabel?.textColor = UIColor.theme.general.destructiveRed
+            cell.titleLabel.text = Strings.Settings.ClearPrivateData.ClearButton
+            cell.titleLabel.textAlignment = .center
+            cell.titleLabel.textColor = Theme.general.destructiveRed
             cell.accessibilityTraits = UIAccessibilityTraits.button
             cell.accessibilityIdentifier = "ClearPrivateData"
             clearButton = cell
@@ -166,7 +168,7 @@ class ClearPrivateDataTableViewController: ThemedTableViewController {
         headerView?.showTopBorder = false
         var sectionTitle: String?
         if section == SectionToggles {
-            sectionTitle = Strings.SettingsClearPrivateDataTitle
+            sectionTitle = Strings.Settings.ClearPrivateData.Title
         } else {
             sectionTitle = nil
         }

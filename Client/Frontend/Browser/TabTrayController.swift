@@ -39,7 +39,6 @@ class TabTrayController: UIViewController {
     var collectionView: UICollectionView!
 
     let statusBarBG = UIView()
-
     lazy var toolbar: TrayToolbar = {
         let toolbar = TrayToolbar()
         toolbar.addTabButton.addTarget(self, action: #selector(didTapToolbarAddTab), for: .touchUpInside)
@@ -89,6 +88,11 @@ class TabTrayController: UIViewController {
         self.view.layoutIfNeeded()
     }
 
+    override func viewWillTransition(to size: CGSize, with coordinator: UIViewControllerTransitionCoordinator) {
+        // When the app enters split screen mode we refresh the collection view layout to show the proper grid
+        collectionView.collectionViewLayout.invalidateLayout()
+    }
+
     deinit {
         tabManager.removeDelegate(self.tabDisplayManager)
         tabManager.removeDelegate(self)
@@ -117,7 +121,7 @@ class TabTrayController: UIViewController {
         view.accessibilityLabel = NSLocalizedString("Tabs Tray", comment: "Accessibility label for the Tabs Tray view.")
 
         collectionView.alwaysBounceVertical = true
-        collectionView.backgroundColor = UIColor.theme.tabTray.background
+        collectionView.backgroundColor = Theme.tabTray.background
         collectionView.keyboardDismissMode = .onDrag
 
         collectionView.dragInteractionEnabled = true
@@ -127,7 +131,7 @@ class TabTrayController: UIViewController {
         makeConstraints()
 
         // The statusBar needs a background color
-        statusBarBG.backgroundColor = UIColor.theme.tabTray.toolbar
+        statusBarBG.backgroundColor = Theme.tabTray.toolbar
         view.addSubview(statusBarBG)
         statusBarBG.snp.makeConstraints { make in
             make.leading.trailing.top.equalTo(self.view)
@@ -164,10 +168,10 @@ class TabTrayController: UIViewController {
 
     override var preferredStatusBarStyle: UIStatusBarStyle {
         //special case for iPad
-        if UIDevice.current.isPad && ThemeManager.instance.currentName == .normal {
+        if UIDevice.current.isPad {
             return .default
         }
-        return ThemeManager.instance.statusBarStyle
+        return Theme.statusBarStyle
     }
 
     fileprivate func makeConstraints() {
@@ -206,11 +210,9 @@ class TabTrayController: UIViewController {
             fromView = emptyPrivateTabsView
         }
 
-        tabDisplayManager.togglePrivateMode(isOn: !tabDisplayManager.isPrivate, createTabOnEmptyPrivateMode: false)
-
         tabManager.willSwitchTabMode(leavingPBM: tabDisplayManager.isPrivate)
 
-        self.tabDisplayManager.refreshStore()
+        tabDisplayManager.togglePrivateMode(isOn: !tabDisplayManager.isPrivate, createTabOnEmptyPrivateMode: false)
 
         // If we are exiting private mode and we have the close private tabs option selected, make sure
         // we clear out all of the private tabs
@@ -265,6 +267,7 @@ class TabTrayController: UIViewController {
             return
         }
         openNewTab()
+        self.dismissTabTray()
     }
 
     func openNewTab(_ request: URLRequest? = nil) {
@@ -282,8 +285,8 @@ extension TabTrayController: Themeable {
 
     func applyTheme() {
         self.collectionView.reloadData()
-        self.collectionView.backgroundColor = UIColor.theme.tabTray.background
-        self.statusBarBG.backgroundColor = UIColor.theme.tabTray.toolbar
+        self.collectionView.backgroundColor = Theme.tabTray.background
+        self.statusBarBG.backgroundColor = Theme.tabTray.toolbar
         self.toolbar.applyTheme()
         self.toolbar.applyUIMode(isPrivate: self.tabDisplayManager.isPrivate)
     }
@@ -294,6 +297,7 @@ extension TabTrayController: TabManagerDelegate {
     func tabManager(_ tabManager: TabManager, didSelectedTabChange selected: Tab?, previous: Tab?, isRestoring: Bool) {}
     func tabManager(_ tabManager: TabManager, didAddTab tab: Tab, isRestoring: Bool) {}
     func tabManager(_ tabManager: TabManager, didRemoveTab tab: Tab, isRestoring: Bool) {}
+    func tabManager(_ tabManager: TabManager, didUpdateTab tab: Tab, isRestoring: Bool) {}
 
     func tabManagerDidRestoreTabs(_ tabManager: TabManager) {
         self.emptyPrivateTabsView.isHidden = !self.privateTabsAreEmpty()
@@ -549,7 +553,7 @@ extension TabTrayController {
         }
 
         let controller = AlertController(title: nil, message: nil, preferredStyle: .actionSheet)
-        controller.addAction(UIAlertAction(title: Strings.AppMenuCloseAllTabsTitleString, style: .default, handler: { _ in self.closeTabsForCurrentTray() }), accessibilityIdentifier: "TabTrayController.deleteButton.closeAll")
+        controller.addAction(UIAlertAction(title: Strings.Menu.CloseAllTabsTitleString, style: .default, handler: { _ in self.closeTabsForCurrentTray() }), accessibilityIdentifier: "TabTrayController.deleteButton.closeAll")
         controller.addAction(UIAlertAction(title: NSLocalizedString("Cancel", comment: "Label for Cancel button"), style: .cancel, handler: nil), accessibilityIdentifier: "TabTrayController.deleteButton.cancel")
         controller.popoverPresentationController?.sourceView = self.toolbar.doneButton
         controller.popoverPresentationController?.sourceRect = self.toolbar.doneButton.bounds
@@ -745,8 +749,8 @@ class TrayToolbar: UIView, Themeable, PrivateModeUI {
     lazy var doneButton: UIButton = {
         let button = UIButton()
         button.setTitle(Strings.DoneTabsViewButtonTitle, for: [])
-        button.setTitleColor(UIColor.theme.tabTray.toolbarButtonTint, for: [])
-        button.accessibilityLabel = Strings.TabTrayDeleteMenuButtonAccessibilityLabel
+        button.setTitleColor(Theme.tabTray.toolbarButtonTint, for: [])
+        button.accessibilityLabel = Strings.Menu.TabTrayDeleteMenuButtonAccessibilityLabel
         button.accessibilityIdentifier = "TabTrayController.removeTabsButton"
         return button
     }()
@@ -800,11 +804,11 @@ class TrayToolbar: UIView, Themeable, PrivateModeUI {
     }
 
     func applyTheme() {
-        self.addTabButton.tintColor = UIColor.theme.tabTray.toolbarButtonTint
-        self.doneButton.setTitleColor(UIColor.theme.tabTray.toolbarButtonTint, for: [])
-        self.backgroundColor = UIColor.theme.tabTray.toolbar
-        self.maskButton.offTint = UIColor.theme.tabTray.privateModeButtonOffTint
-        self.maskButton.onTint = UIColor.theme.tabTray.privateModeButtonOnTint
+        self.addTabButton.tintColor = Theme.tabTray.toolbarButtonTint
+        self.doneButton.setTitleColor(Theme.tabTray.toolbarButtonTint, for: [])
+        self.backgroundColor = Theme.tabTray.toolbar
+        self.maskButton.offTint = Theme.tabTray.privateModeButtonOffTint
+        self.maskButton.onTint = Theme.tabTray.privateModeButtonOnTint
     }
 }
 
@@ -825,7 +829,7 @@ class TabCell: UICollectionViewCell, Themeable {
         let view = UIView()
         view.layer.cornerRadius = TabTrayControllerUX.CornerRadius
         view.clipsToBounds = true
-        view.backgroundColor = UIColor.theme.tabTray.cellBackground
+        view.backgroundColor = Theme.browser.background
         return view
     }()
 
@@ -836,7 +840,7 @@ class TabCell: UICollectionViewCell, Themeable {
         view.isUserInteractionEnabled = false
         view.alignLeft = true
         view.alignTop = true
-        view.backgroundColor = UIColor.theme.tabTray.background
+        view.backgroundColor = Theme.tabTray.background
         return view
     }()
 
@@ -845,7 +849,7 @@ class TabCell: UICollectionViewCell, Themeable {
         label.isUserInteractionEnabled = false
         label.numberOfLines = 1
         label.font = DynamicFontHelper.defaultHelper.DefaultSmallFontBold
-        label.textColor = UIColor.theme.tabTray.tabTitleText
+        label.textColor = Theme.tabTray.tabTitleText
         return label
     }()
 
@@ -858,12 +862,12 @@ class TabCell: UICollectionViewCell, Themeable {
         button.setImage(UIImage.templateImageNamed("tab_close"), for: [])
         button.imageView?.contentMode = .scaleAspectFit
         button.contentMode = .center
-        button.tintColor = UIColor.theme.tabTray.cellCloseButton
+        button.tintColor = Theme.tabTray.cellCloseButton
         button.imageEdgeInsets = UIEdgeInsets(equalInset: TabTrayControllerUX.CloseButtonEdgeInset)
         return button
     }()
 
-    var title = UIVisualEffectView(effect: UIBlurEffect(style: UIColor.theme.tabTray.tabTitleBlur))
+    var title = UIVisualEffectView(effect: UIBlurEffect(style: Theme.tabTray.tabTitleBlur))
     var animator: SwipeAnimator!
 
     weak var delegate: TabCellDelegate?
@@ -914,7 +918,7 @@ class TabCell: UICollectionViewCell, Themeable {
 
     func setTabSelected(_ isPrivate: Bool) {
         // This creates a border around a tabcell. Using the shadow craetes a border _outside_ of the tab frame.
-        layer.shadowColor = (isPrivate ? UIColor.theme.tabTray.privateModePurple : UIConstants.SystemBlueColor).cgColor
+        layer.shadowColor = (isPrivate ? Theme.tabTray.privateModePurple : UIConstants.SystemBlueColor).cgColor
         layer.shadowOpacity = 1
         layer.shadowRadius = 0 // A 0 radius creates a solid border instead of a gradient blur
         layer.masksToBounds = false
@@ -925,11 +929,11 @@ class TabCell: UICollectionViewCell, Themeable {
     }
 
     func applyTheme() {
-        self.backgroundHolder.backgroundColor = UIColor.theme.tabTray.cellBackground
-        self.screenshotView.backgroundColor = UIColor.theme.browser.background
-        self.titleText.textColor = UIColor.theme.tabTray.tabTitleText
-        self.closeButton.tintColor = UIColor.theme.tabTray.cellCloseButton
-        self.title.effect = UIBlurEffect(style: UIColor.theme.tabTray.tabTitleBlur)
+        self.backgroundHolder.backgroundColor = Theme.browser.background
+        self.screenshotView.backgroundColor = Theme.tabTray.cellBackground
+        self.titleText.textColor = Theme.tabTray.tabTitleText
+        self.closeButton.tintColor = Theme.tabTray.cellCloseButton
+        self.title.effect = UIBlurEffect(style: Theme.tabTray.tabTitleBlur)
     }
 
     required init?(coder aDecoder: NSCoder) {

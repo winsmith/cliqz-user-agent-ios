@@ -22,11 +22,13 @@ private struct PhotonActionSheetCellUX {
 
 class PhotonActionSheetCell: UITableViewCell {
     static let Padding: CGFloat = 16
-    static let HorizontalPadding: CGFloat = 10
+    static let HorizontalPadding: CGFloat = 1
     static let VerticalPadding: CGFloat = 2
     static let IconSize = 16
 
     var badgeOverlay: BadgeWithBackdrop?
+
+    var didRemove: ((UITableViewCell) -> Void)?
 
     private func createLabel() -> UILabel {
         let label = UILabel()
@@ -90,11 +92,13 @@ class PhotonActionSheetCell: UITableViewCell {
         func setOn(_ on: Bool) {
             foreground.image = on ? UIImage(named: "menu-customswitch-on") : UIImage(named: "menu-customswitch-off")
             mainView.accessibilityIdentifier = on ? "enabled" : "disabled"
-            mainView.tintColor = on ? UIColor.theme.general.controlTint : UIColor.Grey90.with(alpha: .fortyPercent)
+            mainView.tintColor = on ? Theme.general.controlTint : UIColor.Grey90.with(alpha: .fortyPercent)
         }
     }
 
     let toggleSwitch = ToggleSwitch()
+
+    var removeButton: UIButton!
 
     lazy var selectedOverlay: UIView = {
         let selectedOverlay = UIView()
@@ -106,7 +110,7 @@ class PhotonActionSheetCell: UITableViewCell {
     lazy var disclosureIndicator: UIImageView = {
         let disclosureIndicator = createIconImageView()
         disclosureIndicator.image = UIImage(named: "menu-Disclosure")?.withRenderingMode(.alwaysTemplate)
-        disclosureIndicator.tintColor = UIColor.theme.tableView.rowDetailText
+        disclosureIndicator.tintColor = Theme.tableView.rowDetailText
         return disclosureIndicator
     }()
 
@@ -127,6 +131,8 @@ class PhotonActionSheetCell: UITableViewCell {
     override func prepareForReuse() {
         super.prepareForReuse()
         self.statusIcon.image = nil
+        self.removeButton?.removeFromSuperview()
+        self.removeButton = nil
         disclosureIndicator.removeFromSuperview()
         disclosureLabel.removeFromSuperview()
         toggleSwitch.mainView.removeFromSuperview()
@@ -176,7 +182,6 @@ class PhotonActionSheetCell: UITableViewCell {
         titleLabel.text = action.title
         titleLabel.textColor = self.tintColor
         titleLabel.textColor = action.accessory == .Text ? titleLabel.textColor.withAlphaComponent(0.6) : titleLabel.textColor
-        titleLabel.numberOfLines = 1
         titleLabel.adjustsFontSizeToFitWidth = true
         titleLabel.minimumScaleFactor = 0.5
 
@@ -207,7 +212,7 @@ class PhotonActionSheetCell: UITableViewCell {
                 let label = UILabel(frame: CGRect())
                 label.text = action.tabCount
                 label.font = UIFont.boldSystemFont(ofSize: UIConstants.DefaultChromeSmallSize)
-                label.textColor = UIColor.theme.textField.textAndTint
+                label.textColor = Theme.textField.textAndTint
                 let image = UIImage(named: iconName)?.withRenderingMode(.alwaysTemplate)
                 statusIcon.image = image
                 statusIcon.addSubview(label)
@@ -253,8 +258,31 @@ class PhotonActionSheetCell: UITableViewCell {
         case .Switch:
             toggleSwitch.setOn(action.isEnabled)
             stackView.addArrangedSubview(toggleSwitch.mainView)
+        case .Remove:
+            self.addRemoveButton()
         default:
             break // Do nothing. The rest are not supported yet.
         }
+        action.customRender?(titleLabel, contentView)
     }
+
+    private func addRemoveButton() {
+        guard self.removeButton == nil else {
+            return
+        }
+        self.removeButton = UIButton()
+        self.removeButton.setImage(UIImage(named: "clear")?.withRenderingMode(.alwaysTemplate), for: .normal)
+        self.removeButton.tintColor = self.tintColor
+        self.removeButton.addTarget(self, action: #selector(PhotonActionSheetCell.removeButtonAction), for: .touchUpInside)
+        self.stackView.addArrangedSubview(self.removeButton)
+        self.removeButton.snp.makeConstraints { (make) in
+            make.width.equalTo(self.removeButton.snp.height)
+            make.height.equalTo(self.stackView)
+        }
+    }
+
+    @objc func removeButtonAction() {
+        self.didRemove?(self)
+    }
+
 }

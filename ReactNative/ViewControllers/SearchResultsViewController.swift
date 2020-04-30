@@ -16,7 +16,7 @@ import React
 ///     - add `.view` as a subview to your view
 ///     - add constraints for `.view`
 ///     - ALSO add constraints for `.searchView` (!!!)
-class SearchResultsViewController: UIViewController, ReactViewTheme {
+class SearchResultsViewController: UIViewController {
     public var isLastCharacterRemoved = false
 
     // MARK: Properties
@@ -45,7 +45,7 @@ class SearchResultsViewController: UIViewController, ReactViewTheme {
         RCTRootView(
             bridge: ReactNativeBridge.sharedInstance.bridge,
             moduleName: "SearchResults",
-            initialProperties: ["theme": SearchResultsViewController.getTheme()]
+            initialProperties: [:]
         )
     }()
 
@@ -84,12 +84,38 @@ class SearchResultsViewController: UIViewController, ReactViewTheme {
 extension SearchResultsViewController: Themeable {
     func applyTheme() {
         view.backgroundColor = UIColor.clear
-        updateTheme()
     }
 }
 
 // MARK: - Private API
 extension SearchResultsViewController: BrowserCoreClient {
+    func reportSelection(query: String, url: URL, completion: String?, isForgetMode: Bool) {
+        let complentionLength = completion?.count ?? 0
+        let isAutocompleted = complentionLength > 0
+        let completionRange = query.startIndex..<query.index(query.startIndex, offsetBy: query.count - complentionLength)
+        let queryWithoutCompletion = query[completionRange]
+
+        browserCore.callAction(module: "search", action: "reportSelection", args: [
+            [
+                "action": "enter",
+                "elementName": "",
+                "isFromAutocompletedURL": isAutocompleted,
+                "isNewTab": false,
+                "isPrivateMode": isForgetMode,
+                "isPrivateResult": false,
+                "query": queryWithoutCompletion,
+                "rawResult": [
+                    "index": 0,
+                    "url": url.absoluteString,
+                    "type": isAutocompleted ? "" : "navigate-to",
+                    "provider": isAutocompleted ? "cliqz" : "instant",
+                ],
+                "url": url.absoluteString,
+            ],
+            ["contextId": "mobile-cards"],
+        ])
+    }
+
     private func startSearch(_ keyCode: String) {
         browserCore.callAction(module: "search", action: "startSearch", args: [
             searchQuery,
@@ -100,16 +126,7 @@ extension SearchResultsViewController: BrowserCoreClient {
 
     private func stopSearch() {
         browserCore.callAction(module: "search", action: "stopSearch", args: [
-            ["entryPoint": ""],
             ["contextId": "mobile-cards"],
         ])
-    }
-
-    private func updateTheme() {
-         browserCore.callAction(
-           module: "BrowserCore",
-           action: "changeTheme",
-           args: [Self.getTheme()]
-         )
     }
 }

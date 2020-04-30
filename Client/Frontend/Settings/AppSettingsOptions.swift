@@ -29,7 +29,7 @@ class HiddenSetting: Setting {
 class DeleteExportedDataSetting: HiddenSetting {
     override var title: NSAttributedString? {
         // Not localized for now.
-        return NSAttributedString(string: "Debug: delete exported databases", attributes: [NSAttributedString.Key.foregroundColor: UIColor.theme.tableView.rowText])
+        return NSAttributedString(string: "Debug: delete exported databases", attributes: [NSAttributedString.Key.foregroundColor: Theme.tableView.rowText])
     }
 
     override func onClick(_ navigationController: UINavigationController?) {
@@ -51,7 +51,7 @@ class DeleteExportedDataSetting: HiddenSetting {
 class ExportBrowserDataSetting: HiddenSetting {
     override var title: NSAttributedString? {
         // Not localized for now.
-        return NSAttributedString(string: "Debug: copy databases to app container", attributes: [NSAttributedString.Key.foregroundColor: UIColor.theme.tableView.rowText])
+        return NSAttributedString(string: "Debug: copy databases to app container", attributes: [NSAttributedString.Key.foregroundColor: Theme.tableView.rowText])
     }
 
     override func onClick(_ navigationController: UINavigationController?) {
@@ -71,7 +71,7 @@ class ExportBrowserDataSetting: HiddenSetting {
 class ExportLogDataSetting: HiddenSetting {
     override var title: NSAttributedString? {
         // Not localized for now.
-        return NSAttributedString(string: "Debug: copy log files to app container", attributes: [NSAttributedString.Key.foregroundColor: UIColor.theme.tableView.rowText])
+        return NSAttributedString(string: "Debug: copy log files to app container", attributes: [NSAttributedString.Key.foregroundColor: Theme.tableView.rowText])
     }
 
     override func onClick(_ navigationController: UINavigationController?) {
@@ -81,7 +81,7 @@ class ExportLogDataSetting: HiddenSetting {
 
 class ForceCrashSetting: HiddenSetting {
     override var title: NSAttributedString? {
-        return NSAttributedString(string: "Debug: Force Crash", attributes: [NSAttributedString.Key.foregroundColor: UIColor.theme.tableView.rowText])
+        return NSAttributedString(string: "Debug: Force Crash", attributes: [NSAttributedString.Key.foregroundColor: Theme.tableView.rowText])
     }
 
     override func onClick(_ navigationController: UINavigationController?) {
@@ -91,7 +91,7 @@ class ForceCrashSetting: HiddenSetting {
 
 class SlowTheDatabase: HiddenSetting {
     override var title: NSAttributedString? {
-        return NSAttributedString(string: "Debug: simulate slow database operations", attributes: [NSAttributedString.Key.foregroundColor: UIColor.theme.tableView.rowText])
+        return NSAttributedString(string: "Debug: simulate slow database operations", attributes: [NSAttributedString.Key.foregroundColor: Theme.tableView.rowText])
     }
 
     override func onClick(_ navigationController: UINavigationController?) {
@@ -102,7 +102,7 @@ class SlowTheDatabase: HiddenSetting {
 class SentryIDSetting: HiddenSetting {
     let deviceAppHash = UserDefaults(suiteName: AppInfo.sharedContainerIdentifier)?.string(forKey: "SentryDeviceAppHash") ?? "0000000000000000000000000000000000000000"
     override var title: NSAttributedString? {
-        return NSAttributedString(string: "Debug: \(deviceAppHash)", attributes: [NSAttributedString.Key.foregroundColor: UIColor.theme.tableView.rowText, NSAttributedString.Key.font: UIFont.systemFont(ofSize: 10)])
+        return NSAttributedString(string: "Debug: \(deviceAppHash)", attributes: [NSAttributedString.Key.foregroundColor: Theme.tableView.rowText, NSAttributedString.Key.font: UIFont.systemFont(ofSize: 10)])
     }
 
     override func onClick(_ navigationController: UINavigationController?) {
@@ -110,7 +110,7 @@ class SentryIDSetting: HiddenSetting {
     }
 
     func copyAppDeviceIDAndPresentAlert(by navigationController: UINavigationController?) {
-        let alertTitle = Strings.SettingsCopyAppVersionAlertTitle
+        let alertTitle = Strings.Settings.CopyAppVersionAlertTitle
         let alert = AlertController(title: alertTitle, message: nil, preferredStyle: .alert)
         getSelectedCell(by: navigationController)?.setSelected(false, animated: true)
         UIPasteboard.general.string = deviceAppHash
@@ -143,11 +143,7 @@ class VersionSetting: Setting {
     override var title: NSAttributedString? {
         let appVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as! String
         let buildNumber = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as! String
-        return NSAttributedString(string: String(format: NSLocalizedString("Version %@ (%@)", comment: "Version number of Firefox shown in settings"), appVersion, buildNumber), attributes: [NSAttributedString.Key.foregroundColor: UIColor.theme.tableView.rowText])
-    }
-
-    override func onConfigureCell(_ cell: UITableViewCell) {
-        super.onConfigureCell(cell)
+        return NSAttributedString(string: String(format: NSLocalizedString("Version %@ (%@)", comment: "Version number of Firefox shown in settings"), appVersion, buildNumber), attributes: [NSAttributedString.Key.foregroundColor: Theme.tableView.rowText])
     }
 
     override func onClick(_ navigationController: UINavigationController?) {
@@ -164,7 +160,7 @@ class VersionSetting: Setting {
     }
 
     func copyAppVersionAndPresentAlert(by navigationController: UINavigationController?) {
-        let alertTitle = Strings.SettingsCopyAppVersionAlertTitle
+        let alertTitle = Strings.Settings.CopyAppVersionAlertTitle
         let alert = AlertController(title: alertTitle, message: nil, preferredStyle: .alert)
         getSelectedCell(by: navigationController)?.setSelected(false, animated: true)
         UIPasteboard.general.string = self.title?.string
@@ -186,7 +182,7 @@ class VersionSetting: Setting {
 // Opens the license page in a new tab
 class LicenseAndAcknowledgementsSetting: Setting {
     override var title: NSAttributedString? {
-        return NSAttributedString(string: NSLocalizedString("Licenses", comment: "Settings item that opens a tab containing the licenses. See http://mzl.la/1NSAWCG"), attributes: [NSAttributedString.Key.foregroundColor: UIColor.theme.tableView.rowText])
+        return NSAttributedString(string: NSLocalizedString("Licenses", comment: "Settings item that opens a tab containing the licenses. See http://mzl.la/1NSAWCG"), attributes: [NSAttributedString.Key.foregroundColor: Theme.tableView.rowText])
     }
 
     override var url: URL? {
@@ -206,25 +202,24 @@ class ShowIntroductionSetting: Setting {
 
     init(settings: SettingsTableViewController) {
         self.profile = settings.profile
-        super.init(title: NSAttributedString(string: NSLocalizedString("Show Tour", comment: "Show the on-boarding screen again from the settings"), attributes: [NSAttributedString.Key.foregroundColor: UIColor.theme.tableView.rowText]))
+        super.init(title: NSAttributedString(string: NSLocalizedString("Show Tour", comment: "Show the on-boarding screen again from the settings"), attributes: [NSAttributedString.Key.foregroundColor: Theme.tableView.rowText]))
     }
 
     override func onClick(_ navigationController: UINavigationController?) {
         navigationController?.dismiss(animated: true, completion: {
-            if let appDelegate = UIApplication.shared.delegate as? AppDelegate {
-                appDelegate.browserViewController.presentIntroViewController(true)
-            }
+            BrowserViewController.foregroundBVC().setPhoneWindowBackground(color: Theme.browser.background)
+            BrowserViewController.foregroundBVC().presentIntroViewController(true)
         })
     }
 }
 
 class SendFeedbackSetting: Setting {
     override var title: NSAttributedString? {
-        return NSAttributedString(string: NSLocalizedString("FAQ & Support", comment: "Menu item in settings used to open https://cliqz.com/support"), attributes: [NSAttributedString.Key.foregroundColor: UIColor.theme.tableView.rowText])
+        return NSAttributedString(string: Strings.Settings.FAQAndSupport, attributes: [NSAttributedString.Key.foregroundColor: Theme.tableView.rowText])
     }
 
     override var url: URL? {
-        return URL(string: "https://cliqz.com/support")
+        return URL(string: Strings.FeedbackWebsite)
     }
 
     override func onClick(_ navigationController: UINavigationController?) {
@@ -238,13 +233,11 @@ class SearchSetting: Setting {
 
     override var accessoryType: UITableViewCell.AccessoryType { return .disclosureIndicator }
 
-    override var style: UITableViewCell.CellStyle { return .value1 }
-
     override var accessibilityIdentifier: String? { return "Search" }
 
     init(settings: SettingsTableViewController) {
         self.profile = settings.profile
-        super.init(title: NSAttributedString(string: Strings.SettingsAdditionalSearchEnginesSectionTitle, attributes: [NSAttributedString.Key.foregroundColor: UIColor.theme.tableView.rowText]))
+        super.init(title: NSAttributedString(string: Strings.Settings.AdditionalSearchEngines.SectionTitle, attributes: [NSAttributedString.Key.foregroundColor: Theme.tableView.rowText]))
     }
 
     override func onClick(_ navigationController: UINavigationController?) {
@@ -272,7 +265,7 @@ class SearchLanguageSetting: Setting {
     init(currentRegion: Search.Country?, availableRegions: [Search.Country]?) {
         self.currentRegion = currentRegion
         self.availableRegions = availableRegions
-        super.init(title: NSAttributedString(string: Strings.SettingsSearchResultForLanguage, attributes: [NSAttributedString.Key.foregroundColor: UIColor.theme.tableView.rowText]))
+        super.init(title: NSAttributedString(string: Strings.Settings.SearchResultForLanguage.Title, attributes: [NSAttributedString.Key.foregroundColor: Theme.tableView.rowText]))
     }
 
     override func onClick(_ navigationController: UINavigationController?) {
@@ -280,6 +273,35 @@ class SearchLanguageSetting: Setting {
             return
         }
         let viewController = SearchResultsSettingsViewController(selectedRegion: region, availableRegions: regions)
+        navigationController?.pushViewController(viewController, animated: true)
+    }
+}
+
+// Opens the News for language settings
+class NewsLanguageSetting: Setting {
+
+    private var currentRegion: News.Country?
+    private var availableRegions: [News.Country]?
+
+    override var accessoryType: UITableViewCell.AccessoryType { return .disclosureIndicator }
+
+    override var style: UITableViewCell.CellStyle { return .value1 }
+
+    override var status: NSAttributedString? { return NSAttributedString(string: self.currentRegion?.name ?? "") }
+
+    override var accessibilityIdentifier: String? { return "News" }
+
+    init(currentRegion: News.Country?, availableRegions: [News.Country]?) {
+        self.currentRegion = currentRegion
+        self.availableRegions = availableRegions
+        super.init(title: NSAttributedString(string: Strings.Settings.News.Language.Title, attributes: [NSAttributedString.Key.foregroundColor: Theme.tableView.rowText]))
+    }
+
+    override func onClick(_ navigationController: UINavigationController?) {
+        guard let region = self.currentRegion, let regions = self.availableRegions else {
+            return
+        }
+        let viewController = NewsLanguagesSettingsViewController(selectedRegion: region, availableRegions: regions)
         navigationController?.pushViewController(viewController, animated: true)
     }
 }
@@ -296,8 +318,8 @@ class ClearPrivateDataSetting: Setting {
         self.profile = settings.profile
         self.tabManager = settings.tabManager
 
-        let clearTitle = Strings.SettingsDataManagementSectionName
-        super.init(title: NSAttributedString(string: clearTitle, attributes: [NSAttributedString.Key.foregroundColor: UIColor.theme.tableView.rowText]))
+        let clearTitle = Strings.Settings.DataManagement.SectionName
+        super.init(title: NSAttributedString(string: clearTitle, attributes: [NSAttributedString.Key.foregroundColor: Theme.tableView.rowText]))
     }
 
     override func onClick(_ navigationController: UINavigationController?) {
@@ -308,13 +330,43 @@ class ClearPrivateDataSetting: Setting {
     }
 }
 
+class TodayWidgetSetting: Setting {
+    let profile: Profile
+
+    override var accessoryType: UITableViewCell.AccessoryType { return .disclosureIndicator }
+
+    override var style: UITableViewCell.CellStyle { return .value1 }
+
+    override var status: NSAttributedString? {
+        guard let name = self.profile.prefs.stringForKey(PrefsKeys.TodayWidgetWeatherLocation) else {
+            return nil
+        }
+        return NSAttributedString(string: name)
+    }
+
+    override var accessibilityIdentifier: String? { return "TodayWidgetSetting" }
+
+    init(settings: SettingsTableViewController) {
+        self.profile = settings.profile
+
+        let clearTitle = Strings.Settings.TodayWidget.Title
+        super.init(title: NSAttributedString(string: clearTitle, attributes: [NSAttributedString.Key.foregroundColor: Theme.tableView.rowText]))
+    }
+
+    override func onClick(_ navigationController: UINavigationController?) {
+        let viewController = TodayWidgetViewController()
+        viewController.profile = self.profile
+        navigationController?.pushViewController(viewController, animated: true)
+    }
+}
+
 class PrivacyPolicySetting: Setting {
     override var title: NSAttributedString? {
-        return NSAttributedString(string: NSLocalizedString("Privacy Policy", comment: "Show Firefox Browser Privacy Policy page from the Privacy section in the settings. See https://www.mozilla.org/privacy/firefox/"), attributes: [NSAttributedString.Key.foregroundColor: UIColor.theme.tableView.rowText])
+        return NSAttributedString(string: NSLocalizedString("Privacy Policy", comment: "Show Firefox Browser Privacy Policy page from the Privacy section in the settings. See https://www.mozilla.org/privacy/firefox/"), attributes: [NSAttributedString.Key.foregroundColor: Theme.tableView.rowText])
     }
 
     override var url: URL? {
-        return URL(string: "https://www.cliqz.com/mobile/privacy-cliqz-for-ios")
+        return URL(string: Strings.PrivacyPolicyWebsite)
     }
 
     override func onClick(_ navigationController: UINavigationController?) {
@@ -333,7 +385,7 @@ class SiriPageSetting: Setting {
     init(settings: SettingsTableViewController) {
         self.profile = settings.profile
 
-        super.init(title: NSAttributedString(string: Strings.SettingsSiriSectionName, attributes: [NSAttributedString.Key.foregroundColor: UIColor.theme.tableView.rowText]))
+        super.init(title: NSAttributedString(string: Strings.Settings.Siri.SectionName, attributes: [NSAttributedString.Key.foregroundColor: Theme.tableView.rowText]))
     }
 
     override func onClick(_ navigationController: UINavigationController?) {
@@ -368,11 +420,83 @@ class OpenWithSetting: Setting {
     init(settings: SettingsTableViewController) {
         self.profile = settings.profile
 
-        super.init(title: NSAttributedString(string: Strings.SettingsOpenWithSectionName, attributes: [NSAttributedString.Key.foregroundColor: UIColor.theme.tableView.rowText]))
+        super.init(title: NSAttributedString(string: Strings.Settings.OpenWith.SectionName, attributes: [NSAttributedString.Key.foregroundColor: Theme.tableView.rowText]))
     }
 
     override func onClick(_ navigationController: UINavigationController?) {
         let viewController = OpenWithSettingsViewController(prefs: profile.prefs)
+        navigationController?.pushViewController(viewController, animated: true)
+    }
+}
+
+class NewTabPageDefaultViewSetting: Setting {
+    let profile: Profile
+
+    override var accessoryType: UITableViewCell.AccessoryType { return .disclosureIndicator }
+
+    override var accessibilityIdentifier: String? { return "DefaultView.Setting" }
+
+    override var status: NSAttributedString {
+        guard let segment = self.profile.prefs.intForKey(PrefsKeys.NewTabPageDefaultView) else {
+            return NSAttributedString(string: HomeViewController.Segment.defaultValue.title)
+        }
+        let title = HomeViewController.Segment(rawValue: segment)?.title ?? ""
+        return NSAttributedString(string: title)
+    }
+
+    override var style: UITableViewCell.CellStyle { return .value1 }
+
+    init(settings: SettingsTableViewController) {
+        self.profile = settings.profile
+
+        super.init(title: NSAttributedString(string: Strings.Settings.NewTabPageDefaultView.SectionName, attributes: [NSAttributedString.Key.foregroundColor: Theme.tableView.rowText]))
+    }
+
+    override func onClick(_ navigationController: UINavigationController?) {
+        var selectedSegment: HomeViewController.Segment!
+        if let segment = self.profile.prefs.intForKey(PrefsKeys.NewTabPageDefaultView) {
+            selectedSegment = HomeViewController.Segment(rawValue: segment)
+        } else {
+            selectedSegment = HomeViewController.Segment.defaultValue
+        }
+        let availableSegments: [HomeViewController.Segment] = [.topSites, .bookmarks, .history]
+        let viewController = NewTabDefaultViewSettingsViewController(profile: self.profile, selectedSegment: selectedSegment, availableSegments: availableSegments)
+        navigationController?.pushViewController(viewController, animated: true)
+    }
+}
+
+class OnBrowserStartShowSetting: Setting {
+    let profile: Profile
+
+    override var accessoryType: UITableViewCell.AccessoryType { return .disclosureIndicator }
+
+    override var accessibilityIdentifier: String? { return "OnBrowserStartShow.Setting" }
+
+    override var status: NSAttributedString {
+        guard let segment = self.profile.prefs.intForKey(PrefsKeys.OnBrowserStartTab) else {
+            return NSAttributedString(string: TabManager.StartTab.defaultValue.title)
+        }
+        let title = TabManager.StartTab(rawValue: segment)?.title ?? ""
+        return NSAttributedString(string: title)
+    }
+
+    override var style: UITableViewCell.CellStyle { return .value1 }
+
+    init(settings: SettingsTableViewController) {
+        self.profile = settings.profile
+
+        super.init(title: NSAttributedString(string: Strings.Settings.OnBrowserStartTab.SectionName, attributes: [NSAttributedString.Key.foregroundColor: Theme.tableView.rowText]))
+    }
+
+    override func onClick(_ navigationController: UINavigationController?) {
+        var selectedStartTab: TabManager.StartTab!
+        if let startTab = self.profile.prefs.intForKey(PrefsKeys.OnBrowserStartTab) {
+            selectedStartTab = TabManager.StartTab(rawValue: startTab)
+        } else {
+            selectedStartTab = TabManager.StartTab.defaultValue
+        }
+        let availableStartTabs: [TabManager.StartTab] = [.lastOpenedTab, .newTab]
+        let viewController = OnBrowserStartShowSettingsViewController(profile: self.profile, selectedStartTab: selectedStartTab, availableStartTabs: availableStartTabs)
         navigationController?.pushViewController(viewController, animated: true)
     }
 }
@@ -385,7 +509,7 @@ class TranslationSetting: Setting {
 
     init(settings: SettingsTableViewController) {
         self.profile = settings.profile
-        super.init(title: NSAttributedString(string: Strings.SettingTranslateSnackBarTitle, attributes: [NSAttributedString.Key.foregroundColor: UIColor.theme.tableView.rowText]))
+        super.init(title: NSAttributedString(string: Strings.Settings.TranslateSnackBar.Title, attributes: [NSAttributedString.Key.foregroundColor: Theme.tableView.rowText]))
     }
 
     override func onClick(_ navigationController: UINavigationController?) {

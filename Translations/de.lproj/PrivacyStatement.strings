@@ -1,0 +1,52 @@
+/* 
+  File.strings
+  UserAgent
+
+  Created by Shahen Antonyan on 12/11/19.
+  Copyright © 2019 Cliqz. All rights reserved.
+*/
+
+/* Done button title */
+"PrivacyStatement.DoneButton" = "Fertig";
+
+/* Title displayed on the top of screen. */
+"PrivacyStatement.Title" = "Eine Nachricht zum Datenschutz";
+
+/* Profile name. */
+"PrivacyStatement.ProfileName" = "Krzysztof";
+
+/* Profile title. */
+"PrivacyStatement.ProfileTitle" = "Cliqz iOS Team";
+
+/* Human Web setting status. */
+"PrivacyStatement.HumanWebStatus" = "Hilf uns, unsere Suchmaschine zu bauen";
+
+/* Statistic setting title. */
+"PrivacyStatement.StatisticTitle" = "Interaktions-Statistiken";
+
+/* Statistic setting status. */
+"PrivacyStatement.StatisticStatus" = "Hilf uns, diese App zu verbessern";
+
+/* Repository title. */
+"PrivacyStatement.RepositoryTitle" = "GitHub Repository";
+
+/* Privacy title. */
+"PrivacyStatement.PrivacyTitle" = "Datenschutzerklärung";
+
+/* Message cell tile. */
+"PrivacyStatement.MessageCellTitle" = "Nachricht schreiben";
+
+/* Conversation static message. */
+"PrivacyStatement.SettingsConversation1" = "Hi, ich programmiere diese App. Bei Cliqz bauen wir Produkte mit \"Privacy-by-Design\". Und wir glauben an Transparenz.";
+
+/* Conversation static message. */
+"PrivacyStatement.SettingsConversation2" = "Der Cliqz Browser sammelt nur nicht-personenbezogene Daten. Deshalb können wir dich niemals identifizeren – technisch unmöglich! Ich glaube dennoch, Du solltest selbst entscheiden, ob Du sogar das abschalten möchtest:";
+
+/* Conversation static message. */
+"PrivacyStatement.RepositoryConversation" = "Du musst das jetzt nicht einfach so glauben – unser Code ist open-source!";
+
+/* Conversation static message. */
+"PrivacyStatement.PrivacyConversation" = "Bei Interesse findest Du hier eine ausführliche Version unserer Datenschutz-Praktiken:";
+
+/* Conversation static message. */
+"PrivacyStatement.MessageConversation" = "Lass mich wissen, wenn Du Fragen hast.";

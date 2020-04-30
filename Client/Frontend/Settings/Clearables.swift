@@ -10,9 +10,6 @@ import CoreSpotlight
 
 private let log = Logger.browserLogger
 
-// Removed Clearables as part of Bug 1226654, but keeping the string around.
-private let removedSavedLoginsLabel = NSLocalizedString("Saved Logins", tableName: "ClearPrivateData", comment: "Settings item for clearing passwords and login data")
-
 // A base protocol for something that can be cleared.
 protocol Clearable {
     func clear() -> Success
@@ -36,7 +33,7 @@ class HistoryClearable: Clearable {
     }
 
     var label: String {
-        return NSLocalizedString("Browsing History", tableName: "ClearPrivateData", comment: "Settings item for clearing browsing history")
+        return Strings.Settings.DataManagement.PrivateData.BrowsingHistory
     }
 
     func clear() -> Success {
@@ -77,7 +74,7 @@ class CacheClearable: Clearable {
     }
 
     var label: String {
-        return NSLocalizedString("Cache", tableName: "ClearPrivateData", comment: "Settings item for clearing the cache")
+        return Strings.Settings.DataManagement.PrivateData.Cache
     }
 
     func clear() -> Success {
@@ -122,7 +119,7 @@ class SiteDataClearable: Clearable {
     }
 
     var label: String {
-        return NSLocalizedString("Offline Website Data", tableName: "ClearPrivateData", comment: "Settings item for clearing website data")
+        return Strings.Settings.DataManagement.PrivateData.OfflineWebsiteData
     }
 
     func clear() -> Success {
@@ -136,18 +133,20 @@ class SiteDataClearable: Clearable {
 
 // Remove all cookies stored by the site. This includes localStorage, sessionStorage, and WebSQL/IndexedDB.
 class CookiesClearable: Clearable {
+
+    static let dataTypes = Set([WKWebsiteDataTypeCookies, WKWebsiteDataTypeLocalStorage, WKWebsiteDataTypeSessionStorage, WKWebsiteDataTypeWebSQLDatabases, WKWebsiteDataTypeIndexedDBDatabases])
+
     let tabManager: TabManager
     init(tabManager: TabManager) {
         self.tabManager = tabManager
     }
 
     var label: String {
-        return NSLocalizedString("Cookies", tableName: "ClearPrivateData", comment: "Settings item for clearing cookies")
+        return Strings.Settings.DataManagement.PrivateData.Cookies
     }
 
     func clear() -> Success {
-        let dataTypes = Set([WKWebsiteDataTypeCookies, WKWebsiteDataTypeLocalStorage, WKWebsiteDataTypeSessionStorage, WKWebsiteDataTypeWebSQLDatabases, WKWebsiteDataTypeIndexedDBDatabases])
-        WKWebsiteDataStore.default().removeData(ofTypes: dataTypes, modifiedSince: .distantPast, completionHandler: {})
+        WKWebsiteDataStore.default().removeData(ofTypes: CookiesClearable.dataTypes, modifiedSince: .distantPast, completionHandler: {})
 
         log.debug("CookiesClearable succeeded.")
         return succeed()
@@ -157,31 +156,22 @@ class CookiesClearable: Clearable {
 class TrackingProtectionClearable: Clearable {
     //TO DO: re-using string because we are too late in cycle to change strings
     var label: String {
-        return Strings.SettingsTrackingProtectionSectionName
+        return Strings.Settings.DataManagement.PrivateData.TrackingProtection
     }
 
     func clear() -> Success {
-        let result1 = Success()
-        ContentBlocker.shared.clearAdsWhitelist() {
-            result1.fill(Maybe(success: ()))
+        let result = Success()
+        ContentBlocker.shared.clearAllowLists() {
+            result.fill(Maybe(success: ()))
         }
-        let result2 = Success()
-        ContentBlocker.shared.clearTrackingWhitelist() {
-            result2.fill(Maybe(success: ()))
-        }
-        return all([
-            result1,
-            result2,
-        ]).bind() { (_) -> Success in
-            return succeed()
-        }
+        return result
     }
 }
 
 // Clears our downloaded files in the `~/Documents/Downloads` folder.
 class DownloadedFilesClearable: Clearable {
     var label: String {
-        return NSLocalizedString("Downloaded Files", tableName: "ClearPrivateData", comment: "Settings item for deleting downloaded files")
+        return Strings.Settings.DataManagement.PrivateData.DownloadedFiles
     }
 
     func clear() -> Success {
@@ -195,5 +185,40 @@ class DownloadedFilesClearable: Clearable {
         NotificationCenter.default.post(name: .PrivateDataClearedDownloadedFiles, object: nil)
 
         return succeed()
+    }
+}
+
+// Clears privacy stats.
+class PrivacyStatsClearable: Clearable {
+    var label: String {
+        return Strings.Settings.DataManagement.PrivateData.PrivacyStats
+    }
+
+    func clear() -> Success {
+        let result = Success()
+        guard let appDelegate = UIApplication.shared.delegate as? AppDelegate else {
+            return result
+        }
+        appDelegate.insightsFeature.clearStats()
+        return result
+    }
+}
+
+// Removing search history.
+class SearchHistoryClearable: Clearable {
+    let profile: Profile
+    init(profile: Profile) {
+        self.profile = profile
+    }
+
+    var label: String {
+        return Strings.Settings.DataManagement.PrivateData.SearchHistory
+    }
+
+    func clear() -> Success {
+        return self.profile.history.clearSearchHistory().bindQueue(.main) { success in
+            log.debug("SearchHistoryClearable succeeded: \(success).")
+            return Deferred(value: success)
+        }
     }
 }

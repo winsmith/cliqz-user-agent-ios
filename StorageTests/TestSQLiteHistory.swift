@@ -1053,7 +1053,7 @@ class TestSQLiteHistory: XCTestCase {
 
         let prefs = MockProfilePrefs()
         let history = SQLiteHistory(db: db, prefs: prefs)
-        let results = history.getSitesByLastVisit(limit: 10, offset: 0).value.successValue
+        let results = history.getSitesByLastVisit(limit: 10, offset: 0, domainName: nil).value.successValue
         XCTAssertNotNil(results)
         XCTAssertEqual(results![0]?.url, "http://www.example.com")
 
@@ -1136,7 +1136,7 @@ class TestSQLiteHistory: XCTestCase {
             return countTopSites()
         })
         .upon({ (count: Maybe<Cursor<Int>>) in
-            XCTAssert(count.successValue![0] == 2, "2 site returned")
+            XCTAssert(count.successValue![0] == 1, "1 site returned")
             expectation.fulfill()
         })
 
@@ -1191,7 +1191,7 @@ class TestSQLiteHistory: XCTestCase {
 
         func checkSitesByDate(_ f: @escaping (Cursor<Site>) -> Success) -> () -> Success {
             return {
-                history.getSitesByLastVisit(limit: 10, offset: 0)
+                history.getSitesByLastVisit(limit: 10, offset: 0, domainName: nil)
                 >>== f
             }
         }

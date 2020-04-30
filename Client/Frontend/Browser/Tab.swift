@@ -38,8 +38,9 @@ protocol TabDelegate {
 }
 
 @objc
-protocol URLChangeDelegate {
+protocol TabStateChangeDelegate {
     func tab(_ tab: Tab, urlDidChangeTo url: URL)
+    func tab(_ tab: Tab, titleDidChangeTo title: String)
 }
 
 struct TabState {
@@ -47,6 +48,23 @@ struct TabState {
     var url: URL?
     var title: String?
     var favicon: Favicon?
+}
+
+class TabRegistry {
+    private static var weakTabSet: [WeakRef<Tab>] = []
+
+    public static func getTabId(_ tab: Tab) -> Int {
+        let id: Int
+        if let index = self.weakTabSet.firstIndex(where: { $0.value === tab }) {
+            // tab id counted from 1 not from 0
+            id = index + 1
+        } else {
+            weakTabSet.append(WeakRef(tab))
+            // tab id counted from 1 not from 0
+            id = weakTabSet.count
+        }
+        return id
+    }
 }
 
 class Tab: NSObject {
@@ -62,6 +80,10 @@ class Tab: NSObject {
         }
     }
 
+    var id: Int {
+        return TabRegistry.getTabId(self)
+    }
+
     var tabState: TabState {
         return TabState(isPrivate: _isPrivate, url: url, title: displayTitle, favicon: displayFavicon)
     }
@@ -71,8 +93,6 @@ class Tab: NSObject {
     var pageMetadata: PageMetadata?
 
     var consecutiveCrashes: UInt = 0
-
-    var queries: [URL: String] = [:]
 
     var canonicalURL: URL? {
         if let string = pageMetadata?.siteURL,
@@ -92,11 +112,25 @@ class Tab: NSObject {
         return self.url
     }
 
+    // Get the tab's current URL. If it is `nil`, check the `sessionData` since
+    // it may be a tab that has not been restored yet.
+    var actualURL: URL? {
+        var url = self.url
+        if url == nil, let sessionData = self.sessionData {
+            let urls = sessionData.urls
+            let index = sessionData.currentPage + urls.count - 1
+            if index < urls.count {
+                url = urls[index]
+            }
+        }
+        return url
+    }
+
     var userActivity: NSUserActivity?
 
     var webView: WKWebView?
     var tabDelegate: TabDelegate?
-    weak var urlDidChangeDelegate: URLChangeDelegate?     // TO DO : generalize this.
+    private var tabStateChangeDelegates = WeakList<TabStateChangeDelegate>()
     var bars = [SnackBar]()
     var favicons = [Favicon]()
     var lastExecutedTime: Timestamp?
@@ -109,6 +143,8 @@ class Tab: NSObject {
             if let _url = url, let internalUrl = InternalURL(_url), internalUrl.isAuthorized {
                 url = URL(string: internalUrl.stripAuthorization)
             }
+            let isHistoryEmpty = self.backList?.isEmpty ?? true && self.forwardList?.isEmpty ?? true
+            self.isPureNewTabPage = self.isNewTabPage && isHistoryEmpty
         }
     }
     var mimeType: String?
@@ -134,10 +170,24 @@ class Tab: NSObject {
     /// Whether or not the desktop site was requested with the last request, reload or navigation.
     var changedUserAgent: Bool = false {
         didSet {
-            webView?.customUserAgent = changedUserAgent ? UserAgent.oppositeUserAgent() : nil
             if changedUserAgent != oldValue {
                 TabEvent.post(.didToggleDesktopMode, for: self)
             }
+        }
+    }
+
+    var isNewTabPage: Bool {
+        guard let url = self.url else {
+            return true
+        }
+        return NewTabPage.fromAboutHomeURL(url: url) != nil
+    }
+
+    var isPureNewTabPage: Bool = true
+
+    var allowPullToRefresh: Bool = true {
+        didSet {
+            self.refreshControl?.isEnabled = self.allowPullToRefresh
         }
     }
 
@@ -163,8 +213,13 @@ class Tab: NSObject {
     /// tab instance, queue it for later until we become foregrounded.
     fileprivate var alertQueue = [JSAlertInfo]()
 
-    init(configuration: WKWebViewConfiguration, isPrivate: Bool = false) {
+    private (set) var refreshControl: CliqzRefreshControl?
+
+    weak var browserViewController: BrowserViewController?
+
+    init(bvc: BrowserViewController, configuration: WKWebViewConfiguration, isPrivate: Bool = false) {
         self.configuration = configuration
+        self.browserViewController = bvc
         super.init()
         self.isPrivate = isPrivate
 
@@ -182,8 +237,8 @@ class Tab: NSObject {
     var logoURL: URL {
         let logoPlaceholderURL = URL(string: Strings.BrandWebsite)!
         let faviconURL = URL(nullableString: self.displayFavicon?.url)
-        var logoURL = self.url ?? faviconURL ?? logoPlaceholderURL
-        if InternalURL.isValid(url: logoURL) {
+        var logoURL = self.actualURL ?? faviconURL ?? logoPlaceholderURL
+        if InternalURL.isValid(url: logoURL) || SearchURL.isValid(url: logoURL) {
             logoURL = logoPlaceholderURL
         }
         return logoURL
@@ -217,7 +272,10 @@ class Tab: NSObject {
 
             self.webView = webView
             self.webView?.addObserver(self, forKeyPath: KVOConstants.URL.rawValue, options: .new, context: nil)
+            self.webView?.addObserver(self, forKeyPath: KVOConstants.title.rawValue, options: .new, context: nil)
             UserScriptManager.shared.injectUserScriptsIntoTab(self)
+            self.setupRefreshControl()
+
             tabDelegate?.tab?(self, didCreateWebView: webView)
         }
     }
@@ -263,7 +321,7 @@ class Tab: NSObject {
         guard let appDelegate = UIApplication.shared.delegate as? AppDelegate else { return }
         func checkTabCount(failures: Int) {
             // Need delay for pool to drain.
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
                 if appDelegate.tabManager.tabs.count == debugTabCount {
                     return
                 }
@@ -281,6 +339,7 @@ class Tab: NSObject {
         contentScriptManager.uninstall(tab: self)
 
         webView?.removeObserver(self, forKeyPath: KVOConstants.URL.rawValue)
+        webView?.removeObserver(self, forKeyPath: KVOConstants.title.rawValue)
 
         if let webView = webView {
             tabDelegate?.tab?(self, willDeleteWebView: webView)
@@ -296,11 +355,7 @@ class Tab: NSObject {
     }
 
     func removeAllBrowsingData(completionHandler: @escaping () -> Void = {}) {
-        let dataTypes = Set([WKWebsiteDataTypeCookies,
-                             WKWebsiteDataTypeLocalStorage,
-                             WKWebsiteDataTypeSessionStorage,
-                             WKWebsiteDataTypeWebSQLDatabases,
-                             WKWebsiteDataTypeIndexedDBDatabases, ])
+        let dataTypes = WKWebsiteDataStore.allWebsiteDataTypes()
 
         webView?.configuration.websiteDataStore.removeData(ofTypes: dataTypes,
                                                      modifiedSince: Date.distantPast,
@@ -344,12 +399,12 @@ class Tab: NSObject {
         // When picking a display title. Tabs with sessionData are pending a restore so show their old title.
         // To prevent flickering of the display title. If a tab is restoring make sure to use its lastTitle.
         if let url = self.url, InternalURL(url)?.isAboutHomeURL ?? false, sessionData == nil, !restoring {
-            return Strings.AppMenuOpenHomePageTitleString
+            return Strings.Menu.OpenHomePageTitleString
         }
 
         //lets double check the sessionData in case this is a non-restored new tab
         if let firstURL = sessionData?.urls.first, sessionData?.urls.count == 1, InternalURL(firstURL)?.isAboutHomeURL ?? false {
-            return Strings.AppMenuOpenHomePageTitleString
+            return Strings.Menu.OpenHomePageTitleString
         }
 
         if let url = self.url, !InternalURL.isValid(url: url), let shownUrl = url.displayURL?.absoluteString {
@@ -410,6 +465,12 @@ class Tab: NSObject {
     }
 
     func reload() {
+        // If the current page is an error page, and the reload button is tapped, load the original URL
+        if let url = webView?.url, let internalUrl = InternalURL(url), let page = internalUrl.originalURLFromErrorPage {
+            webView?.evaluateJavaScript("location.replace('\(page)')", completionHandler: nil)
+            return
+        }
+
         if let _ = webView?.reloadFromOrigin() {
             print("reloaded zombified tab from origin")
             return
@@ -452,6 +513,7 @@ class Tab: NSObject {
     }
 
     func addSnackbar(_ bar: SnackBar) {
+        if bars.count > 2 { return } // maximum 3 snackbars allowed on a tab
         bars.append(bar)
         tabDelegate?.tab(self, didAddSnackbar: bar)
     }
@@ -512,15 +574,26 @@ class Tab: NSObject {
     }
 
     override func observeValue(forKeyPath keyPath: String?, of object: Any?, change: [NSKeyValueChangeKey: Any]?, context: UnsafeMutableRawPointer?) {
-        guard let webView = object as? WKWebView, webView == self.webView,
-            let path = keyPath, path == KVOConstants.URL.rawValue else {
+        guard
+            let webView = object as? WKWebView,
+            webView == self.webView,
+            let path = keyPath,
+            path == KVOConstants.URL.rawValue || path == KVOConstants.title.rawValue
+        else {
             return assertionFailure("Unhandled KVO key: \(keyPath ?? "nil")")
         }
-        guard let url = self.webView?.url else {
-            return
-        }
 
-        self.urlDidChangeDelegate?.tab(self, urlDidChangeTo: url)
+        if path == KVOConstants.URL.rawValue {
+            guard let url = self.webView?.url else { return }
+            for delegate in self.tabStateChangeDelegates {
+                delegate.tab(self, urlDidChangeTo: url)
+            }
+        } else if path == KVOConstants.title.rawValue {
+            guard let title = self.webView?.title else { return }
+            for delegate in self.tabStateChangeDelegates {
+                delegate.tab(self, titleDidChangeTo: title)
+            }
+        }
     }
 
     func isDescendentOf(_ ancestor: Tab) -> Bool {
@@ -538,19 +611,44 @@ class Tab: NSObject {
         }
     }
 
-    func observeURLChanges(delegate: URLChangeDelegate) {
-        self.urlDidChangeDelegate = delegate
+    func observeStateChanges(delegate: TabStateChangeDelegate) {
+        self.tabStateChangeDelegates.insert(delegate)
     }
 
-    func removeURLChangeObserver(delegate: URLChangeDelegate) {
-        if let existing = self.urlDidChangeDelegate, existing === delegate {
-            self.urlDidChangeDelegate = nil
-        }
+    func removeStateChangeObserver(delegate: TabStateChangeDelegate) {
+        _ = self.tabStateChangeDelegates.remove(delegate)
     }
 
     func applyTheme() {
-        UITextField.appearance().keyboardAppearance = isPrivate ? .dark : (ThemeManager.instance.currentName == .dark ? .dark : .light)
+        UITextField.appearance().keyboardAppearance = isPrivate ? .dark : .default
     }
+
+    private func setupRefreshControl() {
+        guard let scrollView = self.webView?.scrollView, self.refreshControl == nil else { return }
+        self.refreshControl = CliqzRefreshControl(scrollView: scrollView)
+        self.refreshControl?.delegate = self
+    }
+
+}
+
+extension Tab: CliqzRefreshControlDelegate {
+
+    func refreshControllAlphaDidChange(alpha: CGFloat) {
+        self.browserViewController?.notchAreaCover.alpha = 1 - alpha
+    }
+
+    func refreshControllMinimumHeight() -> CGFloat {
+        return self.browserViewController?.notchAreaCover.frame.height ?? 0
+    }
+
+    func refreshControllDidRefresh() {
+        self.reload()
+    }
+
+    func isRefreshing() -> Bool {
+        return self.webView?.isLoading ?? false
+    }
+
 }
 
 extension Tab: TabWebViewDelegate {
@@ -624,9 +722,10 @@ class TabWebView: WKWebView, MenuHelperInterface {
     // the theme if the webview is showing "about:blank" (nil).
     func applyTheme() {
         if url == nil {
-            let backgroundColor = ThemeManager.instance.current.browser.background.hexString
+            let backgroundColor = Theme.browser.background.hexString
             evaluateJavaScript("document.documentElement.style.backgroundColor = '\(backgroundColor)';")
         }
+        window?.backgroundColor = Theme.browser.background
     }
 
     override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {

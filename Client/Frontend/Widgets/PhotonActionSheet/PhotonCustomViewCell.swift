@@ -8,8 +8,19 @@
 
 import UIKit
 
+public protocol PhotonCustomViewCellContent: UIView {
+    var onSizeChange: (() -> Void)? { get set }
+}
+
 class PhotonCustomViewCell: UITableViewCell {
-    var customView: UIView? {
+    public var onSizeChange: (() -> Void)? {
+        didSet {
+            guard let newCustomView = customView else { return }
+            newCustomView.onSizeChange = onSizeChange
+        }
+    }
+
+    var customView: PhotonCustomViewCellContent? {
         didSet {
             backgroundColor = UIColor.clear
 
@@ -21,8 +32,8 @@ class PhotonCustomViewCell: UITableViewCell {
             newCustomView.snp.makeConstraints { make in
                 make.top.equalToSuperview().offset(10)
                 make.bottom.equalToSuperview().offset(-10)
-                make.left.equalToSuperview().offset(16)
-                make.right.equalToSuperview().offset(-16)
+                make.left.equalToSuperview().offset(PhotonActionSheetCell.Padding)
+                make.right.equalToSuperview().offset(-PhotonActionSheetCell.Padding)
             }
         }
     }

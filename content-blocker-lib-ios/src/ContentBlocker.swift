@@ -5,10 +5,36 @@
 import WebKit
 import Shared
 
+private let HIDE_ADS_RULE = """
+{
+    "trigger": {
+        "url-filter": ".*"
+    },
+    "action": {
+        "type": "css-display-none",
+        "selector": "#tads"
+    }
+}
+"""
+
+private let HIDE_POPUPS_RULE = """
+{
+    "action": {
+        "type": "ignore-previous-rules"
+    },
+    "trigger": {
+        "url-filter": ".*",
+        "if-domain": ["*www.spiegel.de"]
+    }
+}
+"""
+
 enum BlocklistName: String {
     case advertisingNetwork = "advertisingNetwork"
     case advertisingCosmetic = "advertisingCosmetic"
     case trackingNetwork = "trackingNetwork"
+    case popupsCosmetic = "popupsCosmetic"
+    case popupsNetwork = "popupsNetwork"
 
     var filename: String {
         switch self {
@@ -18,37 +44,49 @@ enum BlocklistName: String {
             return "safari-ads-cosmetic"
         case .trackingNetwork:
             return "safari-tracking-network"
+        case .popupsCosmetic:
+            return "safari-popups-cosmetic"
+        case .popupsNetwork:
+            return "safari-popups-network"
         }
     }
 
-    static var all: [BlocklistName] { return [.advertisingNetwork, .advertisingCosmetic, .trackingNetwork] }
-    static var ads: [BlocklistName] { return [.advertisingNetwork, .advertisingCosmetic] }
-    static var tracking: [BlocklistName] { return [.trackingNetwork] }
-
+    static let all: [BlocklistName] = [
+        .advertisingNetwork,
+        .advertisingCosmetic,
+        .trackingNetwork,
+        .popupsCosmetic,
+        .popupsNetwork,
+    ]
 }
 
 enum BlockerStatus: String {
     case Disabled
     case NoBlockedURLs // When TP is enabled but nothing is being blocked
-    case AdBlockWhitelisted
-    case AntiTrackingWhitelisted
-    case Whitelisted
+    case AdBlockAllowListed
+    case AntiTrackingAllowListed
+    case AllowListed
     case Blocking
 }
 
-struct WhitelistedDomains {
-    var domainSet = Set<String>() {
+internal class AllowLists {
+    public let ads = AllowList(allowListFilename: "ads_whitelist", blocklists: [.advertisingNetwork, .advertisingCosmetic])
+    public let trackers = AllowList(allowListFilename: "whitelist", blocklists: [.trackingNetwork])
+    public let popups = AllowList(allowListFilename: "popups_whitelist", blocklists: [.popupsNetwork, .popupsCosmetic])
+
+    var cleanupStore: AllowList.CleanupStore? {
         didSet {
-            domainRegex = domainSet.compactMap { wildcardContentBlockerDomainToRegex(domain: "*" + $0) }
+            self.ads.cleanupStore = cleanupStore
+            self.trackers.cleanupStore = cleanupStore
+            self.popups.cleanupStore = cleanupStore
         }
     }
 
-    private(set) var domainRegex = [String]()
+    init() {}
 }
 
 class ContentBlocker {
-    var adsWhitelistedDomains = WhitelistedDomains()
-    var trackingWhitelistedDomains = WhitelistedDomains()
+    internal let allowLists = AllowLists()
 
     let ruleStore: WKContentRuleListStore = WKContentRuleListStore.default()
     var setupCompleted = false
@@ -56,13 +94,8 @@ class ContentBlocker {
     static let shared = ContentBlocker()
 
     private init() {
-        // Read the whitelist at startup
-        if let list = self.readAdsWhitelistFile() {
-            self.adsWhitelistedDomains.domainSet = Set(list)
-        }
-
-        if let list = self.readAdsWhitelistFile() {
-            self.adsWhitelistedDomains.domainSet = Set(list)
+        self.allowLists.cleanupStore = { (blocklists, completion) in
+            self.clearAllowLists(fromLists: blocklists, completion: completion)
         }
 
         TPStatsBlocklistChecker.shared.startup()
@@ -77,8 +110,17 @@ class ContentBlocker {
         }
     }
 
-    // Ensure domains used for whitelisting are standardized by using this function.
-    func whitelistableDomain(fromUrl url: URL) -> String? {
+    func clearAllowLists(fromLists: [BlocklistName] = [], completion: (() -> Void)?) {
+        self.removeAllRulesInStore(fromLists: fromLists) {
+            self.compileListsNotInStore {
+                completion?()
+                NotificationCenter.default.post(name: .contentBlockerTabSetupRequired, object: nil)
+            }
+        }
+    }
+
+    // Ensure domains used for allowListing are standardized by using this function.
+    func allowListableDomain(fromUrl url: URL) -> String? {
         guard let domain = url.host, !domain.isEmpty else {
             return nil
         }
@@ -167,12 +209,17 @@ extension ContentBlocker {
         }
     }
 
-    func removeAllRulesInStore(completion: @escaping () -> Void) {
+    func removeAllRulesInStore(fromLists: [BlocklistName] = [], completion: @escaping () -> Void) {
+        let filenamesOfListToClean = fromLists.map { $0.filename }
+
         ruleStore.getAvailableContentRuleListIdentifiers { available in
-            guard let available = available else {
+            guard var available = available else {
                 completion()
                 return
             }
+
+            available = available.filter { filenamesOfListToClean.contains($0) }
+
             let deferreds: [Deferred<Void>] = available.map { filename in
                 let result = Deferred<Void>()
                 self.ruleStore.removeContentRuleList(forIdentifier: filename) { _ in
@@ -189,9 +236,16 @@ extension ContentBlocker {
     // If any blocker files are newer than the date saved in prefs,
     // remove all the content blockers and reload them.
     func removeOldListsByDateFromStore(completion: @escaping () -> Void) {
-
-        guard let fileDate = dateOfMostRecentBlockerFile(), let prefsNewestDate = UserDefaults.standard.object(forKey: "blocker-file-date") as? Date else {
+        guard let fileDate = dateOfMostRecentBlockerFile() else {
             completion()
+            return
+        }
+
+        guard let prefsNewestDate = UserDefaults.standard.object(forKey: "blocker-file-date") as? Date else {
+            UserDefaults.standard.set(fileDate, forKey: "blocker-file-date")
+            removeAllRulesInStore() {
+                completion()
+            }
             return
         }
 
@@ -201,6 +255,7 @@ extension ContentBlocker {
         }
 
         UserDefaults.standard.set(fileDate, forKey: "blocker-file-date")
+
         removeAllRulesInStore() {
             completion()
         }
@@ -252,10 +307,16 @@ extension ContentBlocker {
                     var str = jsonString
                     guard let range = str.range(of: "]", options: String.CompareOptions.backwards) else { return }
                     switch item {
-                    case .advertisingNetwork, .advertisingCosmetic:
-                        str = str.replacingCharacters(in: range, with: self.adsWhitelistAsJSON() + "]")
+                    case .advertisingNetwork:
+                        str = str.replacingCharacters(in: range, with: self.adsAllowListAsJSON() + "]")
+                    case .advertisingCosmetic:
+                        str = str.replacingCharacters(in: range, with: self.adsAllowListAsJSON() + "," + HIDE_ADS_RULE + "]")
                     case .trackingNetwork:
-                        str = str.replacingCharacters(in: range, with: self.trackingWhitelistAsJSON() + "]")
+                        str = str.replacingCharacters(in: range, with: self.trackingAllowListAsJSON() + "]")
+                    case .popupsNetwork:
+                        str = str.replacingCharacters(in: range, with: self.popupsAllowListAsJSON() + "," + HIDE_POPUPS_RULE + "]")
+                    case .popupsCosmetic:
+                        str = str.replacingCharacters(in: range, with: self.popupsAllowListAsJSON() + "," + HIDE_POPUPS_RULE + "]")
                     }
                     self.ruleStore.compileContentRuleList(forIdentifier: item.filename, encodedContentRuleList: str) { rule, error in
                         if let error = error {

@@ -10,17 +10,17 @@ extension TabContentBlocker {
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceiveScriptMessage message: WKScriptMessage) {
-        guard (self.isEnabledTrackingProtection || self.isEnabledAdBlocking),
+        guard (self.isPrivacyDashboardEnabled),
             let body = message.body as? [String: String],
             let urlString = body["url"],
             let mainDocumentUrl = tab?.currentURL() else {
             return
         }
 
-        // Reset the pageStats to make sure the trackingprotection shield icon knows that a page was whitelisted
-        let isAdsWhiteListed = !self.isEnabledAdBlocking || ContentBlocker.shared.isAdsWhitelisted(url: mainDocumentUrl)
-        let isTrackingWhiteListed = !self.isEnabledTrackingProtection || ContentBlocker.shared.isTrackingWhitelisted(url: mainDocumentUrl)
-        guard !isAdsWhiteListed || !isTrackingWhiteListed else {
+        // Reset the pageStats to make sure the trackingprotection shield icon knows that a page was allowListed
+        let isAdsAllowListed = !self.isPrivacyDashboardEnabled || ContentBlocker.shared.isAdsAllowListed(url: mainDocumentUrl)
+        let isTrackingAllowListed = !self.isPrivacyDashboardEnabled || ContentBlocker.shared.isTrackingAllowListed(url: mainDocumentUrl)
+        guard !isAdsAllowListed || !isTrackingAllowListed else {
             clearPageStats()
             return
         }
@@ -28,10 +28,9 @@ extension TabContentBlocker {
         components.scheme = "http"
         guard let url = components.url else { return }
 
-        TPStatsBlocklistChecker.shared.isBlocked(url: url).uponQueue(.main) { category in
-            if let category = category {
-                self.stats.update(byAddingCategory: category)
-            }
+        TPStatsBlocklistChecker.shared.isBlocked(url: url).uponQueue(.main) { tracker in
+            guard let tracker = tracker else { return }
+            self.stats.update(byAddingTracker: tracker)
         }
     }
 }

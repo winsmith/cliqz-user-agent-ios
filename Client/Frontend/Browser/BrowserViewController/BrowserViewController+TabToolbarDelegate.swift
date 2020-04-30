@@ -6,13 +6,8 @@ import Shared
 
 extension BrowserViewController: TabToolbarDelegate, PhotonActionSheetProtocol {
     func tabToolbarDidPressBack(_ tabToolbar: TabToolbarProtocol, button: UIButton) {
-        guard let tab = tabManager.selectedTab else { return }
-        if let url = tab.url, let query = tab.queries[url] {
-            self.urlBar.enterOverlayMode(query, pasted: false, search: true)
-            self.urlBar.onCancelAction = { tab.goBack() }
-        } else {
-            tab.goBack()
-        }
+        guard let _ = tabManager.selectedTab else { return }
+        tabManager.selectedTab?.goBack()
     }
 
     func tabToolbarDidLongPressBack(_ tabToolbar: TabToolbarProtocol, button: UIButton) {
@@ -42,16 +37,34 @@ extension BrowserViewController: TabToolbarDelegate, PhotonActionSheetProtocol {
     func tabToolbarDidPressMenu(_ tabToolbar: TabToolbarProtocol, button: UIButton) {
         // ensure that any keyboards or spinners are dismissed before presenting the menu
         UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
-        var actions: [[PhotonActionSheetItem]] = []
 
-        actions.append(getLibraryActions(vcDelegate: self) + getOtherPanelActions(vcDelegate: self))
         // force a modal if the menu is being displayed in compact split screen
         let shouldSuppress = !topTabsVisible && UIDevice.current.isPad
-        presentSheetWith(actions: actions, on: self, from: button, suppressPopover: shouldSuppress)
+        presentSheetWith(actions: getControlCenterActions(vcDelegate: self), on: self, from: button, suppressPopover: shouldSuppress)
+    }
+
+    func tabToolbarDidLongPressMenu(_ tabToolbar: TabToolbarProtocol, button: UIButton) {
+        guard let tab = self.tabManager.selectedTab, let homePanelURL = NewTabPage.topSites.url else {
+            return
+        }
+        tab.loadRequest(PrivilegedRequest(url: homePanelURL) as URLRequest)
     }
 
     func tabToolbarDidPressSearch(_ tabToolbar: TabToolbarProtocol, button: UIButton) {
-        self.focusLocationTextField(forTab: self.tabManager.selectedTab)
+        guard let tab = self.tabManager.selectedTab else {
+            return
+        }
+        if tab.isNewTabPage {
+            if !self.urlBar.inOverlayMode {
+                self.focusLocationTextField(forTab: tab)
+            }
+        } else if let homePanelURL = NewTabPage.topSites.url {
+            tab.loadRequest(PrivilegedRequest(url: homePanelURL) as URLRequest)
+        }
+    }
+
+    func tabToolbarDidLongPressSearch(_ tabToolbar: TabToolbarProtocol, button: UIButton) {
+        self.showQueriesList(tabToolbar, button: button)
     }
 
     func tabToolbarDidPressTabs(_ tabToolbar: TabToolbarProtocol, button: UIButton) {
@@ -64,10 +77,10 @@ extension BrowserViewController: TabToolbarDelegate, PhotonActionSheetProtocol {
         let infinity = "\u{221E}"
         let tabCount = (count < 100) ? count.description : infinity
 
-        let privateBrowsingMode = PhotonActionSheetItem(title: Strings.privateBrowsingModeTitle, iconString: "nav-tabcounter", iconType: .TabsButton, tabCount: tabCount) { _ in
+        let privateBrowsingMode = PhotonActionSheetItem(title: Strings.Hotkeys.privateBrowsingModeTitle, iconString: "nav-tabcounter", iconType: .TabsButton, tabCount: tabCount) { _ in
             self.tabManager.switchPrivacyMode()
         }
-        let normalBrowsingMode = PhotonActionSheetItem(title: Strings.normalBrowsingModeTitle, iconString: "nav-tabcounter", iconType: .TabsButton, tabCount: tabCount) { _ in
+        let normalBrowsingMode = PhotonActionSheetItem(title: Strings.Hotkeys.normalBrowsingModeTitle, iconString: "nav-tabcounter", iconType: .TabsButton, tabCount: tabCount) { _ in
             self.tabManager.switchPrivacyMode()
         }
 
@@ -78,11 +91,11 @@ extension BrowserViewController: TabToolbarDelegate, PhotonActionSheetProtocol {
     }
 
     func getMoreTabToolbarLongPressActions() -> [PhotonActionSheetItem] {
-        let newTab = PhotonActionSheetItem(title: Strings.NewTabTitle, iconString: "quick_action_new_tab", iconType: .Image) { action in
+        let newTab = PhotonActionSheetItem(title: Strings.Hotkeys.NewTabTitle, iconString: "quick_action_new_tab", iconType: .Image) { action in
             self.openBlankNewTab(focusLocationField: false, isPrivate: false)}
-        let newPrivateTab = PhotonActionSheetItem(title: Strings.NewPrivateTabTitle, iconString: "quick_action_new_tab", iconType: .Image) { action in
+        let newPrivateTab = PhotonActionSheetItem(title: Strings.Hotkeys.NewPrivateTabTitle, iconString: "quick_action_new_tab", iconType: .Image) { action in
             self.openBlankNewTab(focusLocationField: false, isPrivate: true)}
-        let closeTab = PhotonActionSheetItem(title: Strings.CloseTabTitle, iconString: "tab_close", iconType: .Image) { action in
+        let closeTab = PhotonActionSheetItem(title: Strings.Hotkeys.CloseTabTitle, iconString: "tab_close", iconType: .Image) { action in
             if let tab = self.tabManager.selectedTab {
                 self.tabManager.removeTabAndUpdateSelectedIndex(tab)
                 self.updateTabCountUsingTabManager(self.tabManager)
@@ -120,4 +133,22 @@ extension BrowserViewController: TabToolbarDelegate, PhotonActionSheetProtocol {
             self.present(backForwardViewController, animated: true, completion: nil)
         }
     }
+
+    func showQueriesList(_ tabToolbar: TabToolbarProtocol, button: UIButton) {
+        guard !self.queries.isEmpty else {
+            return
+        }
+        HapticFeedback.vibrate()
+        let queriesItems = self.getQueriesActions(queries: self.queries, didSelectQuery: { [weak self] (query) in
+            self?.urlBar.enterOverlayMode(query, pasted: false, search: true)
+        }) { [weak self] (query) in
+            self?.queries = self?.queries.filter({ $0 != query }) ?? []
+            if self?.queries.isEmpty ?? false {
+                self?.presentedViewController?.dismiss(animated: true)
+            }
+        }
+        let shouldSuppress = !self.topTabsVisible && UIDevice.current.isPad
+        self.presentSheetWith(actions: [queriesItems], on: self, from: button, suppressPopover: shouldSuppress)
+    }
+
 }

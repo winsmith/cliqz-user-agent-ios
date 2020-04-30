@@ -24,7 +24,7 @@ class AntiPhishingDetector: NSObject {
 
     // MARK: - public APIs
     func isPhishingURL(_ url: URL, completion:@escaping AntiPhishingCheck) -> Bool {
-        guard url.host != "localhost" else {
+        guard url.host != "localhost" && url.host != "local" else {
             completion(false)
             return false
         }
@@ -73,9 +73,9 @@ class AntiPhishingDetector: NSObject {
                 let json = try JSONSerialization.jsonObject(with: data, options: [])
 
                 guard let result = json as? [String: Any] else { return }
-                guard let blacklist = result["blacklist"] as? [Any] else { return }
+                guard let blocklist = result["blacklist"] as? [Any] else { return }
 
-                for suffixTuples in blacklist {
+                for suffixTuples in blocklist {
                     let suffixTuplesArray = suffixTuples as! [AnyObject]
                     if
                         let suffix = suffixTuplesArray.first as? String,

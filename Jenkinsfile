@@ -15,7 +15,7 @@ def triggers = []
 def app
 
 if("$BRANCH_NAME" == 'develop' || "$BRANCH_NAME" == 'jenkins') {
-    triggers << cron('H H(19-22) * * *')
+    triggers << cron('H H(18-20) * * *')
     app = apps['CliqzNightly']
 } else {
     app = apps['Cliqz']
@@ -33,14 +33,15 @@ def vagrantfile = '''
 require 'uri'
 
 node_id = URI::encode(ENV['NODE_ID'] || '')
-name = "mojave-xcode11-#{ENV['BRANCH_NAME'] || ''}"
+name = "catalina-xcode11.3-#{ENV['BRANCH_NAME'] || ''}"
 
 Vagrant.configure("2") do |config|
-    config.vm.box = "mojave-xcode11"
+    config.vm.box = "catalina"
+    config.vm.synced_folder ".", "/vagrant", disabled: true
 
-    config.vm.define "mojave" do |mojave|
-        mojave.vm.hostname = "mojave-xcode11"
-        mojave.ssh.forward_agent = true
+    config.vm.define "catalina" do |image|
+        image.vm.hostname = "catalina-xcode11.3"
+        image.ssh.forward_agent = true
 
         config.vm.provider "parallels" do |prl|
             prl.name = name
@@ -48,12 +49,12 @@ Vagrant.configure("2") do |config|
             prl.cpus = ENV["NODE_CPU_COUNT"] || 2
         end
 
-        mojave.vm.provision "shell", privileged: false, run: "always", inline: <<-SHELL#!/bin/bash -l
+        image.vm.provision "shell", privileged: false, run: "always", inline: <<-SHELL#!/bin/bash -l
             set -e
             set -x
 
-            sudo mkdir -p /jenkins
-            sudo chown vagrant /jenkins
+            sudo mkdir -p /Users/vagrant/jenkins
+            sudo chown vagrant /Users/vagrant/jenkins
 
             brew -v
 
@@ -76,7 +77,7 @@ node('gideon') {
 
     vagrant.inside(
         'Vagrantfile',
-        '/jenkins',
+        '/Users/vagrant/jenkins',
         4, // CPU
         8192, // MEMORY
         12000, // VNC port
@@ -132,7 +133,7 @@ node('gideon') {
                     string(credentialsId: 'ab91f92a-4588-4034-8d7f-c1a741fa31ab', variable: 'FASTLANE_ITC_TEAM_ID'),
                     string(credentialsId: app.sentryDSN, variable: 'SENTRY_DSN'),
                 ]) {
-                    timeout(20) {
+                    timeout(40) {
                         ansiColor('xterm') {
                             sh """#!/bin/bash -l
                                 set -x
@@ -172,7 +173,7 @@ ${newChangelog}"""
                     string(credentialsId: 'f206e880-e09a-4369-a3f6-f86ee94481f2', variable: 'SENTRY_AUTH_TOKEN'),
                     string(credentialsId: 'ab91f92a-4588-4034-8d7f-c1a741fa31ab', variable: 'FASTLANE_ITC_TEAM_ID'),
                 ]) {
-                    timeout(60) {
+                    timeout(120) {
                         ansiColor('xterm') {
                             sh """#!/bin/bash -l
                                 set -x

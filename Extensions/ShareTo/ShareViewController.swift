@@ -81,15 +81,18 @@ class ShareViewController: UIViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
+        setupUI()
+    }
 
-        view.backgroundColor = .white
+    func setupUI() {
+        view.backgroundColor = Theme.defaultBackground.color
+        view.subviews.forEach({ $0.removeFromSuperview() })
 
         setupNavBar()
         setupStackView()
+        setupRows()
 
         guard let shareItem = shareItem else { return }
-
-        self.setupRows()
 
         switch shareItem {
         case .shareItem(let item):
@@ -104,15 +107,18 @@ class ShareViewController: UIViewController {
         let pageInfoRow = makePageInfoRow(addTo: stackView)
         pageInfoRowTitleLabel = pageInfoRow.pageTitleLabel
         pageInfoRowUrlLabel = pageInfoRow.urlLabel
+        pageInfoRowTitleLabel?.textColor = Theme.actionRowTextAndIcon.color
+        pageInfoRowUrlLabel?.textColor = Theme.actionRowTextAndIcon.color
         makeSeparator(addTo: stackView)
 
         if shareItem?.isUrlType() ?? true {
-            makeActionRow(addTo: stackView, label: Strings.ShareOpenIn, imageName: "Icon-Small", action: #selector(actionOpenInFirefoxNow), hasNavigation: false)
-            makeActionRow(addTo: stackView, label: Strings.ShareLoadInBackground, imageName: "menu-Show-Tabs", action: #selector(actionLoadInBackground), hasNavigation: false)
-            makeActionRow(addTo: stackView, label: Strings.ShareBookmarkThisPage, imageName: "AddToBookmarks", action: #selector(actionBookmarkThisPage), hasNavigation: false)
+            makeActionRow(addTo: stackView, label: Strings.ShareExtension.OpenIn, imageName: "Icon-Small", action: #selector(actionOpenInUserAgentNow), hasNavigation: false)
+            makeActionRow(addTo: stackView, label: Strings.ShareExtension.OpenInPrivateTab, imageName: "forgetMode", action: #selector(actionOpenInPrivateTabInUserAgentNow), hasNavigation: false)
+            makeActionRow(addTo: stackView, label: Strings.ShareExtension.LoadInBackground, imageName: "menu-Show-Tabs", action: #selector(actionLoadInBackground), hasNavigation: false)
+            makeActionRow(addTo: stackView, label: Strings.ShareExtension.BookmarkThisPage, imageName: "AddToBookmarks", action: #selector(actionBookmarkThisPage), hasNavigation: false)
         } else {
             pageInfoRowUrlLabel?.removeFromSuperview()
-            makeActionRow(addTo: stackView, label: Strings.ShareSearchIn, imageName: "quickSearch", action: #selector(actionSearchInFirefox), hasNavigation: false)
+            makeActionRow(addTo: stackView, label: Strings.ShareExtension.SearchIn, imageName: "quickSearch", action: #selector(actionSearchInUserAgent), hasNavigation: false)
         }
 
         let footerSpaceRow = UIView()
@@ -134,7 +140,7 @@ class ShareViewController: UIViewController {
 
     private func makeSeparator(addTo parent: UIStackView) {
         let view = UIView()
-        view.backgroundColor = UX.separatorColor
+        view.backgroundColor = Theme.separator.color
         parent.addArrangedSubview(view)
         view.snp.makeConstraints { make in
             make.leading.trailing.equalToSuperview()
@@ -198,12 +204,12 @@ class ShareViewController: UIViewController {
 
         let icon = UIImageView(image: UIImage(named: imageName)?.withRenderingMode(.alwaysTemplate))
         icon.contentMode = .scaleAspectFit
-        icon.tintColor = UX.actionRowTextAndIconColor
+        icon.tintColor = Theme.actionRowTextAndIcon.color
 
         let title = UILabel()
         title.font = UX.baseFont
         title.handleLongLabels()
-        title.textColor = UX.actionRowTextAndIconColor
+        title.textColor = Theme.actionRowTextAndIcon.color
         title.text = label
         [icon, title].forEach { row.addArrangedSubview($0) }
 
@@ -214,7 +220,7 @@ class ShareViewController: UIViewController {
         if hasNavigation {
             let navButton = UIImageView(image: UIImage(named: "menu-Disclosure")?.withRenderingMode(.alwaysTemplate))
             navButton.contentMode = .scaleAspectFit
-            navButton.tintColor = UX.actionRowTextAndIconColor
+            navButton.tintColor = Theme.actionRowTextAndIcon.color
             row.addArrangedSubview(navButton)
             navButton.snp.makeConstraints { make in
                 make.width.equalTo(14)
@@ -251,7 +257,7 @@ class ShareViewController: UIViewController {
     private func makeActionDoneRow(addTo parent: UIStackView) -> (row: UIStackView, label: UILabel) {
         let stackView = UIStackView()
         stackView.axis = .horizontal
-        stackView.addBackground(color: UX.doneLabelBackgroundColor)
+        stackView.addBackground(color: Theme.doneLabelBackground.color)
         stackView.rightLeftEdges(inset: UX.rowInset)
         parent.addArrangedSubview(stackView)
 
@@ -284,7 +290,8 @@ class ShareViewController: UIViewController {
         navigationController?.navigationBar.setValue(true, forKey: "hidesShadow") // hide separator line
         navigationItem.titleView = UIImageView(image: UIImage(named: "Icon-Small"))
         navigationItem.titleView?.contentMode = .scaleAspectFit
-        navigationItem.leftBarButtonItem = UIBarButtonItem(title: Strings.SendToCancelButton, style: .plain, target: self, action: #selector(finish))
+        navigationItem.leftBarButtonItem = UIBarButtonItem(title: Strings.SendTo.CancelButton, style: .plain, target: self, action: #selector(finish))
+        navigationController?.navigationBar.barTintColor = Theme.defaultBackground.color
     }
 
     private func setupStackView() {
@@ -302,7 +309,7 @@ extension ShareViewController {
     @objc func actionLoadInBackground(gesture: UIGestureRecognizer) {
         // To avoid re-rentry from double tap, each action function disables the gesture
         gesture.isEnabled = false
-        animateToActionDoneView(withTitle: Strings.ShareLoadInBackgroundDone)
+        animateToActionDoneView(withTitle: Strings.ShareExtension.LoadInBackgroundDone)
 
         if let shareItem = shareItem, case .shareItem(let item) = shareItem {
             let profile = BrowserProfile(localName: "profile")
@@ -318,7 +325,7 @@ extension ShareViewController {
 
     @objc func actionBookmarkThisPage(gesture: UIGestureRecognizer) {
         gesture.isEnabled = false
-        animateToActionDoneView(withTitle: Strings.ShareBookmarkThisPageDone)
+        animateToActionDoneView(withTitle: Strings.ShareExtension.BookmarkThisPageDone)
 
         if let shareItem = shareItem, case .shareItem(let item) = shareItem {
             let profile = BrowserProfile(localName: "profile")
@@ -332,21 +339,22 @@ extension ShareViewController {
         finish()
     }
 
-    func openFirefox(withUrl url: String, isSearch: Bool) {
+    func openUserAgent(withUrl url: String, isSearch: Bool, isPrivate: Bool = false) {
         // Telemetry is handled in the app delegate that receives this event.
         let profile = BrowserProfile(localName: "profile")
         profile.prefs.setBool(true, forKey: PrefsKeys.AppExtensionTelemetryOpenUrl)
 
-        func firefoxUrl(_ url: String) -> String {
+        func userAgentUrl(_ url: String) -> String {
             let protocolName = AppInfo.protocolName
             let encoded = url.addingPercentEncoding(withAllowedCharacters: NSCharacterSet.alphanumerics) ?? ""
             if isSearch {
                 return "\(protocolName)://open-text?text=\(encoded)"
             }
-            return "\(protocolName)://open-url?url=\(encoded)"
+            let privateTab = isPrivate ? "&private=true" : ""
+            return "\(protocolName)://open-url?url=\(encoded)\(privateTab)"
         }
 
-        guard let url = URL(string: firefoxUrl(url)) else { return }
+        guard let url = URL(string: userAgentUrl(url)) else { return }
         var responder = self as UIResponder?
         let selectorOpenURL = sel_registerName("openURL:")
         while let current = responder {
@@ -359,21 +367,31 @@ extension ShareViewController {
         }
     }
 
-    @objc func actionSearchInFirefox(gesture: UIGestureRecognizer) {
+    @objc func actionSearchInUserAgent(gesture: UIGestureRecognizer) {
         gesture.isEnabled = false
 
         if let shareItem = shareItem, case .rawText(let text) = shareItem {
-            openFirefox(withUrl: text, isSearch: true)
+            openUserAgent(withUrl: text, isSearch: true)
         }
 
         finish(afterDelay: 0)
     }
 
-    @objc func actionOpenInFirefoxNow(gesture: UIGestureRecognizer) {
+    @objc func actionOpenInUserAgentNow(gesture: UIGestureRecognizer) {
         gesture.isEnabled = false
 
         if let shareItem = shareItem, case .shareItem(let item) = shareItem {
-            openFirefox(withUrl: item.url, isSearch: false)
+            openUserAgent(withUrl: item.url, isSearch: false)
+        }
+
+        finish(afterDelay: 0)
+    }
+
+    @objc func actionOpenInPrivateTabInUserAgentNow(gesture: UIGestureRecognizer) {
+        gesture.isEnabled = false
+
+        if let shareItem = shareItem, case .shareItem(let item) = shareItem {
+            openUserAgent(withUrl: item.url, isSearch: false, isPrivate: true)
         }
 
         finish(afterDelay: 0)

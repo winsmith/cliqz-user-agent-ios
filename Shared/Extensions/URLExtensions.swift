@@ -24,33 +24,27 @@ private struct ETLDEntry: CustomStringConvertible {
 
 private typealias TLDEntryMap = [String: ETLDEntry]
 
-private func loadEntriesFromDisk() -> TLDEntryMap? {
-    if let data = String.contentsOfFileWithResourceName("effective_tld_names", ofType: "dat", fromBundle: Bundle(identifier: "org.mozilla.Shared")!, encoding: .utf8, error: nil) {
-        let lines = data.components(separatedBy: "\n")
-        let trimmedLines = lines.filter { !$0.hasPrefix("//") && $0 != "\n" && $0.isEmpty == false }
-
-        var entries = TLDEntryMap()
-        for line in trimmedLines {
-            let entry = ETLDEntry(entry: line)
-            let key: String
-            if entry.isWild {
-                // Trim off the '*.' part of the line
-                key = String(line[line.index(line.startIndex, offsetBy: 2)...])
-            } else if entry.isException {
-                // Trim off the '!' part of the line
-                key = String(line[line.index(line.startIndex, offsetBy: 1)...])
-            } else {
-                key = line
-            }
-            entries[key] = entry
+private func loadEntries() -> TLDEntryMap? {
+    var entries = TLDEntryMap()
+    for line in ETLD_NAMES_LIST where !line.isEmpty && !line.hasPrefix("//") {
+        let entry = ETLDEntry(entry: line)
+        let key: String
+        if entry.isWild {
+            // Trim off the '*.' part of the line
+            key = String(line[line.index(line.startIndex, offsetBy: 2)...])
+        } else if entry.isException {
+            // Trim off the '!' part of the line
+            key = String(line[line.index(line.startIndex, offsetBy: 1)...])
+        } else {
+            key = line
         }
-        return entries
+        entries[key] = entry
     }
-    return nil
+    return entries
 }
 
 private var etldEntries: TLDEntryMap? = {
-    return loadEntriesFromDisk()
+    return loadEntries()
 }()
 
 // MARK: - Local Resource URL Extensions
@@ -281,9 +275,28 @@ extension URL {
         return host.flatMap { publicSuffixFromHost($0, withAdditionalParts: 0) }
     }
 
+    public func publicSuffix(additionalPartCount: Int) -> String? {
+        return host.flatMap { publicSuffixFromHost($0, withAdditionalParts: additionalPartCount) }
+    }
+
     public func isWebPage(includeDataURIs: Bool = true) -> Bool {
         let schemes = includeDataURIs ? ["http", "https", "data"] : ["http", "https"]
         return scheme.map { schemes.contains($0) } ?? false
+    }
+
+    public var isHostIPAddress: Bool {
+        guard let host = self.host else {
+            return false
+        }
+        guard host != "localhost" else {
+            return true
+        }
+        let components = host.components(separatedBy: ".")
+        guard components.count == 4 else {
+            return false
+        }
+        let validNumbersCount = components.compactMap({ Int($0) }).filter({ $0 >= 0 && $0 < 256 })
+        return validNumbersCount.count == 4
     }
 
     public var isIPv6: Bool {
@@ -366,6 +379,11 @@ public struct InternalURL {
     public static let uuid = UUID().uuidString
     public static let scheme = "internal"
     public static let baseUrl = "\(scheme)://local"
+
+    public static func createQueryItem(url: URL) -> URLQueryItem {
+        return URLQueryItem(name: InternalURL.Param.url.rawValue, value: url.absoluteString.toBase64().escape())
+    }
+
     public enum Path: String {
         case errorpage = "errorpage"
         case sessionrestore = "sessionrestore"
@@ -384,7 +402,8 @@ public struct InternalURL {
 
     private let sessionRestoreHistoryItemBaseUrl = "\(InternalURL.baseUrl)/\(InternalURL.Path.sessionrestore.rawValue)?url="
 
-    public static func isValid(url: URL) -> Bool {
+    public static func isValid(url maybeUrl: URL?) -> Bool {
+        guard let url = maybeUrl else { return false }
         let isWebServerUrl = url.absoluteString.hasPrefix("http://localhost:\(AppInfo.webserverPort)/")
         if isWebServerUrl, url.path.hasPrefix("/test-fixture/") {
             // internal test pages need to be treated as external pages
@@ -436,16 +455,23 @@ public struct InternalURL {
 
     public var isErrorPage: Bool {
         // Error pages can be nested in session restore URLs, and session restore handler will forward them to the error page handler
-        let path = url.absoluteString.hasPrefix(sessionRestoreHistoryItemBaseUrl) ? extractedUrlParam?.path : url.path
+        let path = url.absoluteString.hasPrefix(sessionRestoreHistoryItemBaseUrl) ? extractedErrorPageUrlParam?.path : url.path
         return InternalURL.Path.errorpage.matches(path ?? "")
     }
 
     public var originalURLFromErrorPage: URL? {
         if !url.absoluteString.hasPrefix(sessionRestoreHistoryItemBaseUrl) {
-            return isErrorPage ? extractedUrlParam : nil
+            return isErrorPage ? extractedErrorPageUrlParam : nil
         }
-        if let urlParam = extractedUrlParam, let nested = InternalURL(urlParam), nested.isErrorPage {
-            return nested.extractedUrlParam
+        if let urlParam = extractedErrorPageUrlParam, let nested = InternalURL(urlParam), nested.isErrorPage {
+            return nested.extractedErrorPageUrlParam
+        }
+        return nil
+    }
+
+    public var extractedErrorPageUrlParam: URL? {
+        if let nestedUrl = url.getQuery()[InternalURL.Param.url.rawValue]?.unescape()?.fromBase64() {
+            return URL(string: nestedUrl)
         }
         return nil
     }

@@ -24,20 +24,19 @@ class WebsiteDataManagementViewController: UIViewController, UITableViewDataSour
     var tableView: UITableView!
     var searchController: UISearchController?
     var showMoreButtonEnabled = true
-    let theme = BuiltinThemeName(rawValue: ThemeManager.instance.current.name) ?? .normal
 
     private var siteRecords: [WKWebsiteDataRecord]?
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = Strings.SettingsWebsiteDataTitle
+        title = Strings.Settings.WebsiteData.Title
         navigationController?.setToolbarHidden(true, animated: false)
 
         tableView = UITableView()
         tableView.dataSource = self
         tableView.delegate = self
-        tableView.separatorColor = UIColor.theme.tableView.separator
-        tableView.backgroundColor = UIColor.theme.tableView.headerBackground
+        tableView.separatorColor = Theme.tableView.separator
+        tableView.backgroundColor = Theme.tableView.headerBackground
         tableView.isEditing = true
         tableView.allowsSelectionDuringEditing = true
         tableView.register(ThemedTableSectionHeaderFooterView.self, forHeaderFooterViewReuseIdentifier: SectionHeaderFooterIdentifier)
@@ -69,12 +68,9 @@ class WebsiteDataManagementViewController: UIViewController, UITableViewDataSour
 
         searchController.searchResultsUpdater = searchResultsViewController
         searchController.obscuresBackgroundDuringPresentation = false
-        searchController.searchBar.placeholder = Strings.SettingsFilterSitesSearchLabel
+        searchController.searchBar.placeholder = Strings.Settings.DataManagement.SearchLabel
         searchController.searchBar.delegate = self
 
-        if theme == .dark {
-            searchController.searchBar.barStyle = .black
-        }
         navigationItem.searchController = searchController
         navigationItem.hidesSearchBarWhenScrolling = false
         self.searchController = searchController
@@ -95,18 +91,18 @@ class WebsiteDataManagementViewController: UIViewController, UITableViewDataSour
         switch section {
         case .sites:
             if let record = siteRecords?[safe: indexPath.row] {
-                cell.textLabel?.text = record.displayName
+                cell.titleLabel.text = record.displayName
             }
         case .showMore:
-            cell.textLabel?.text = Strings.SettingsWebsiteDataShowMoreButton
-            cell.textLabel?.textColor = showMoreButtonEnabled ? UIColor.theme.general.highlightBlue : UIColor.gray
+            cell.titleLabel.text = Strings.Settings.WebsiteData.ShowMoreButton
+            cell.titleLabel.textColor = showMoreButtonEnabled ? Theme.general.highlightBlue : UIColor.gray
             cell.accessibilityTraits = UIAccessibilityTraits.button
             cell.accessibilityIdentifier = "ShowMoreWebsiteData"
             showMoreButton = cell
         case .clearAllButton:
-            cell.textLabel?.text = Strings.SettingsClearAllWebsiteDataButton
-            cell.textLabel?.textAlignment = .center
-            cell.textLabel?.textColor = UIColor.theme.general.destructiveRed
+            cell.titleLabel.text = Strings.Settings.ClearPrivateData.ClearAllWebsiteDataButton
+            cell.titleLabel.textAlignment = .center
+            cell.titleLabel.textColor = Theme.general.destructiveRed
             cell.accessibilityTraits = UIAccessibilityTraits.button
             cell.accessibilityIdentifier = "ClearAllWebsiteData"
             clearButton = cell
@@ -176,7 +172,7 @@ class WebsiteDataManagementViewController: UIViewController, UITableViewDataSour
 
     func tableView(_ tableView: UITableView, viewForHeaderInSection section: Int) -> UIView? {
         let headerView = tableView.dequeueReusableHeaderFooterView(withIdentifier: SectionHeaderFooterIdentifier) as? ThemedTableSectionHeaderFooterView
-        headerView?.titleLabel.text = section == Section.sites.rawValue ? Strings.SettingsWebsiteDataTitle : nil
+        headerView?.titleLabel.text = section == Section.sites.rawValue ? Strings.Settings.WebsiteData.Title : nil
         headerView?.showBottomBorder = false
         return headerView
     }

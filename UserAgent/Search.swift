@@ -26,7 +26,7 @@ public class Search {
         public var available: [Country]
     }
 
-    private static let defaultRegion = Country(key: "de", name: Strings.SettingsSearchResultForGerman)
+    private static let defaultRegion = Country(key: "de", name: Strings.Settings.SearchResultForLanguage.German)
 
     static let defaultConfig = Config(selected: Search.defaultRegion, available: [Search.defaultRegion])
 
@@ -83,10 +83,10 @@ extension Search: BrowserCoreClient {
             args: []
         ) { (error, result) in
             guard error == nil, let mode = result as? String else {
-                callback(.conservative)
+                callback(.liberal)
                 return
             }
-            callback(AdultFilterMode(rawValue: mode) ?? .conservative)
+            callback(AdultFilterMode(rawValue: mode) ?? .liberal)
         }
     }
 
@@ -96,6 +96,20 @@ extension Search: BrowserCoreClient {
             action: "setAdultFilter",
             args: [filter.rawValue]
         )
+    }
+
+    public static func getWeatherLocation(_ query: String, callback: @escaping (String?) -> Void) {
+        self.browserCore.callAction(
+            module: "search",
+            action: "getWeatherLocation",
+            args: [query]
+        ) { (error, result) in
+            guard error == nil, let city = result as? String else {
+                callback(nil)
+                return
+            }
+            callback(city)
+        }
     }
 
 }

@@ -1,29 +1,27 @@
-/* eslint-disable react/prop-types */
-import React from 'react';
+import React, { useCallback } from 'react';
 import { View, TouchableWithoutFeedback, Text } from 'react-native';
 import { parse } from 'tldts';
-import NativeDrawable, {
-  normalizeUrl,
-} from 'browser-core-user-agent-ios/build/modules/mobile-cards/components/custom/NativeDrawable';
+import { merge } from '@cliqz/component-styles';
 import Logo from './Logo';
+import NativeDrawable from './NativeDrawable';
 import { withTheme } from '../contexts/theme';
 
-const getStyles = theme => ({
+export const getStyles = theme => ({
   container: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
   },
   circle: {
-    borderColor: theme.separatorColor,
-    borderWidth: 1,
     padding: 20,
     borderRadius: 60,
+    backgroundColor: '#ffffff33',
   },
   label: {
     marginTop: 5,
-    color: theme.textColor,
+    color: 'white',
     fontSize: 12,
+    fontWeight: '500',
   },
   pin: {
     position: 'absolute',
@@ -39,49 +37,53 @@ const getStyles = theme => ({
   pinIcon: {
     width: 12,
     height: 12,
-    color: theme.textColor,
+    color: '#ffffff',
   },
 });
 
-const SpeedDial = ({ speedDial, onPress, theme, style = {} }) => {
-  const styles = getStyles(theme);
+const SpeedDial = ({
+  speedDial,
+  onPress,
+  onLongPress,
+  theme,
+  styles: customStyles = {},
+}) => {
+  const styles = merge(getStyles(theme), customStyles);
   const { url } = speedDial;
   const name = parse(url).domain;
-  /* eslint-disable prettier/prettier */
+  const pressAction = useCallback(() => onPress(speedDial), [
+    onPress,
+    speedDial,
+  ]);
+  const longPressAction = useCallback(
+    () => (onLongPress ? onLongPress(speedDial) : null),
+    [onLongPress, speedDial],
+  );
+
   return (
     <TouchableWithoutFeedback
-      onPress={() => onPress(speedDial)}
+      onPress={pressAction}
+      onLongPress={longPressAction}
     >
-      <View
-        style={{
-          ...styles.container,
-          ...style,
-        }}
-      >
+      <View style={styles.container}>
         <View style={styles.circle}>
-          {speedDial.pinned &&
+          {speedDial.pinned && (
             <View style={styles.pin}>
               <NativeDrawable
                 style={styles.pinIcon}
                 color={styles.pinIcon.color}
-                source={normalizeUrl('pin.svg')}
+                source="ic_ez_pin"
               />
             </View>
-          }
-          <Logo
-            key={speedDial.url}
-            url={speedDial.url}
-            size={30}
-          />
+          )}
+          <Logo key={speedDial.url} url={speedDial.url} size={30} />
         </View>
-        <Text
-          numberOfLines={1}
-          style={styles.label}
-        >{name}</Text>
+        <Text numberOfLines={1} style={styles.label} allowFontScaling={false}>
+          {name}
+        </Text>
       </View>
     </TouchableWithoutFeedback>
   );
-  /* eslint-enable prettier/prettier */
 };
 
 export default withTheme(SpeedDial);

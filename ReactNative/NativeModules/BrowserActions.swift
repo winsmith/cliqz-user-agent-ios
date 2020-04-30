@@ -7,36 +7,34 @@
 //
 import React
 import Storage
+import Shared
 
 let HideKeyboardSearchNotification = NSNotification.Name(rawValue: "Search:hideKeyboard")
 
 @objc(BrowserActions)
-class BrowserActions: NSObject {
-    @objc(openLink:query:isSearchEngine:)
-    public func openLink(url_str: NSString, query: NSString, isSearchEngine: Bool) {
-        DispatchQueue.main.async {
-            guard let appDel = UIApplication.shared.delegate as? AppDelegate else {
+class BrowserActions: NSObject, NativeModuleBase {
+    @objc(openLink:query:)
+    public func openLink(url_str: NSString, query: NSString) {
+        self.withAppDelegate { appDel in
+            appDel.useCases.openLink.openLink(urlString: url_str as String, query: query as String)
+        }
+    }
+
+    @objc(openDomain:)
+    public func openDomain(name: NSString) {
+        let domainName = name as String
+        self.withAppDelegate { appDel in
+            guard let profile = appDel.profile else {
                 return
             }
 
-            var url: URL?
-            if let selectedUrl = URL(string: url_str as String) {
-                url = selectedUrl
-            } else if let encodedString = url_str.addingPercentEncoding(
-                withAllowedCharacters: NSCharacterSet.urlFragmentAllowed) {
-                url = URL(string: encodedString)
-            }
-
-            if
-                let url = url,
-                let tab = appDel.tabManager.selectedTab
-            {
-                appDel.browserViewController.finishEditingAndSubmit(url,
-                    visitType: VisitType.link,
-                    forTab: tab)
-                if query.length > 0 {
-                    tab.queries[url] = String(query)
+            profile.history.getDomainProtocol(domainName).uponQueue(.main) { protocolName in
+                guard let protocolName = protocolName.successValue else { return }
+                let url = URL(string: "\(protocolName)://\(domainName)")
+                guard let urlString = url?.absoluteString else {
+                    return
                 }
+                appDel.useCases.openLink.openLink(urlString: urlString, query: "")
             }
         }
     }
@@ -45,6 +43,16 @@ class BrowserActions: NSObject {
     func hideKeyboard() {
         DispatchQueue.main.async {
             NotificationCenter.default.post(name: HideKeyboardSearchNotification, object: nil, userInfo: nil)
+        }
+    }
+
+    @objc(startSearch:)
+    func startSearch(query: NSString) {
+        self.withAppDelegate { appDel in
+            let query = query as String
+            _ = appDel.browserViewController.focusLocationTextField(
+                forTab: appDel.browserViewController.tabManager.selectedTab,
+                setSearchText: query)
         }
     }
 
@@ -64,7 +72,7 @@ class BrowserActions: NSObject {
         DispatchQueue.main.async {
             if let appDel = UIApplication.shared.delegate as? AppDelegate {
                 if let profile = appDel.profile {
-                    var results: [[String: String]] = []
+                    var results: [[String: Any]] = []
                     let frecentHistory = profile.history.getFrecentHistory()
                     frecentHistory.getSites(matchingSearchQuery: query as String, limit: 100).upon { sites in
                         guard let sites = sites.successValue?.asArray() else {
@@ -72,9 +80,11 @@ class BrowserActions: NSObject {
                         }
 
                         for site in sites {
-                            if let url = URL(string: site.url), !self.isDuckduckGoRedirectURL(url) {
-                                let d = ["url": site.url, "title": site.title]
-                                results.append(d)
+                            if
+                                let url = URL(string: site.url),
+                                !profile.searchEngines.isSearchEngineRedirectURL(url: url, query: query as String)
+                            {
+                                results.append(site.toDict())
                             }
                         }
                         callback([results])
@@ -82,17 +92,6 @@ class BrowserActions: NSObject {
                 }
             }
         }
-    }
-
-    private func isDuckduckGoRedirectURL(_ url: URL) -> Bool {
-        let urlString = url.absoluteString
-        if "duckduckgo.com" == url.host,
-            urlString.contains("kh="),
-            urlString.contains("uddg=") {
-            return true
-        }
-
-        return false
     }
 
     @objc(requiresMainQueueSetup)

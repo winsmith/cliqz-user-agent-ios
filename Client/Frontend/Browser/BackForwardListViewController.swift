@@ -29,8 +29,8 @@ class BackForwardListViewController: UIViewController, UITableViewDataSource, UI
         tableView.delegate = self
         tableView.alwaysBounceVertical = false
         tableView.register(BackForwardTableViewCell.self, forCellReuseIdentifier: self.BackForwardListCellIdentifier)
-        tableView.backgroundColor = UIColor.theme.tabTray.cellTitleBackground.withAlphaComponent(0.4)
-        let blurEffect = UIBlurEffect(style: UIColor.theme.tabTray.tabTitleBlur)
+        tableView.backgroundColor = Theme.tabTray.cellTitleBackground.withAlphaComponent(0.4)
+        let blurEffect = UIBlurEffect(style: Theme.tabTray.tabTitleBlur)
         let blurEffectView = UIVisualEffectView(effect: blurEffect)
         tableView.backgroundView = blurEffectView
 
@@ -222,7 +222,7 @@ class BackForwardListViewController: UIViewController, UITableViewDataSource, UI
 
         let isAboutHomeURL = InternalURL(item.url)?.isAboutHomeURL ?? false
         guard !isAboutHomeURL else {
-            cell.site = Site(url: item.url.absoluteString, title: Strings.FirefoxHomePage)
+            cell.site = Site(url: item.url.absoluteString, title: Strings.HistoryPanel.BrowserHomePage)
             return cell
         }
 

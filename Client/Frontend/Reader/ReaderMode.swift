@@ -29,11 +29,62 @@ enum ReaderModeTheme: String {
     case light = "light"
     case dark = "dark"
     case sepia = "sepia"
+
+    static func preferredTheme(for theme: ReaderModeTheme? = nil) -> ReaderModeTheme {
+        // If there is no reader theme provided than we default to light theme
+        let readerTheme = theme ?? .light
+        // Get current Firefox theme (Dark vs Normal)
+        // Normal means light theme. This is the overall theme used
+        // by Firefox iOS app
+        var appWideTheme: ReaderModeTheme = .light
+        if #available(iOS 13.0, *) {
+            appWideTheme = UITraitCollection.current.userInterfaceStyle == .dark ? .dark : .light
+        }
+        // We check for 3 basic themes we have Light / Dark / Sepia
+        // Theme: Dark - app-wide dark overrides all
+        if appWideTheme == .dark {
+            return .dark
+        // Theme: Sepia - special case for when the theme is sepia.
+        // For this we only check the them supplied and not the app wide theme
+        } else if readerTheme == .sepia {
+            return .sepia
+        }
+        // Theme: Light - Default case for when there is no theme supplied i.e. nil and we revert to light
+        return appWideTheme
+    }
+}
+
+private struct FontFamily {
+    static let serifFamily = [ReaderModeFontType.serif, ReaderModeFontType.serifBold]
+    static let sansFamily = [ReaderModeFontType.sansSerif, ReaderModeFontType.sansSerifBold]
+    static let families = [serifFamily, sansFamily]
 }
 
 enum ReaderModeFontType: String {
     case serif = "serif"
+    case serifBold = "serif-bold"
     case sansSerif = "sans-serif"
+    case sansSerifBold = "sans-serif-bold"
+
+    init(type: String) {
+        let font = ReaderModeFontType(rawValue: type)
+        let isBoldFontEnabled = UIAccessibility.isBoldTextEnabled
+
+        switch font {
+        case .serif,
+             .serifBold:
+            self = isBoldFontEnabled ? .serifBold : .serif
+        case .sansSerif,
+             .sansSerifBold:
+            self = isBoldFontEnabled ? .sansSerifBold : .sansSerif
+        case .none:
+            self = .sansSerif
+        }
+    }
+
+    func isSameFamily(_ font: ReaderModeFontType) -> Bool {
+        return !FontFamily.families.filter { $0.contains(font) && $0.contains(self) }.isEmpty
+    }
 }
 
 enum ReaderModeFontSize: Int {
@@ -128,15 +179,19 @@ struct ReaderModeStyle {
         }
 
         let theme = ReaderModeTheme(rawValue: themeRawValue!)
-        let fontType = ReaderModeFontType(rawValue: fontTypeRawValue!)
+        let fontType = ReaderModeFontType(type: fontTypeRawValue!)
         let fontSize = ReaderModeFontSize(rawValue: fontSizeRawValue!)
-        if theme == nil || fontType == nil || fontSize == nil {
+        if theme == nil || fontSize == nil {
             return nil
         }
 
-        self.theme = theme!
-        self.fontType = fontType!
+        self.theme = theme ?? ReaderModeTheme.preferredTheme()
+        self.fontType = fontType
         self.fontSize = fontSize!
+    }
+
+    mutating func ensurePreferredColorThemeIfNeeded() {
+        self.theme = ReaderModeTheme.preferredTheme(for: self.theme)
     }
 }
 

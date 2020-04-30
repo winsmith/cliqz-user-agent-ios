@@ -353,7 +353,7 @@ fileprivate struct SQLiteFrecentHistory: FrecentHistory {
                     domains.id = history.domain_id
                 INNER JOIN visits ON
                     visits.siteID = history.id
-            WHERE (history.is_deleted = 0) AND ((domains.domain NOT LIKE 'r.%') AND (domains.domain NOT LIKE 'google.%')) AND (history.url LIKE 'http%')
+            WHERE (history.is_deleted = 0) AND ((domains.showOnTopSites IS 1) AND (domains.domain NOT LIKE 'r.%') AND (domains.domain NOT LIKE 'google.%')) AND (history.url LIKE 'http%')
             GROUP BY historyID
             """
 
@@ -399,6 +399,11 @@ extension SQLiteHistory: BrowserHistory {
         return db.run([query]) >>== {
             return self.db.run([("UPDATE domains SET showOnTopSites = 1 WHERE domain = ?", [host])])
         }
+    }
+    
+    public func clearPinnedSitesCache() -> Success {
+        let clearPinnedSitesQuery: (String, Args?) = ("DELETE FROM pinned_top_sites", nil)
+        return db.run([clearPinnedSitesQuery])
     }
 
     public func isPinnedTopSite(_ url: String) -> Deferred<Maybe<Bool>> {
@@ -452,6 +457,17 @@ extension SQLiteHistory: BrowserHistory {
         ])
     }
 
+    public func removeAllTracesForDomain(_ host: String) -> Success {
+        let args: Args = [host]
+        let deleteVisits = "DELETE FROM visits WHERE siteID IN (SELECT history.id FROM history JOIN domains ON history.domain_id = domains.id WHERE domains.domain = ?)"
+        let deleteHistory = "DELETE FROM history WHERE domain_id IN (SELECT domains.id FROM domains WHERE domains.domain = ?)"
+        let deleteDomains = "DELETE FROM domains WHERE domains.domain = ?"
+        return db.run([
+            (sql: deleteVisits, args: args),
+            (sql: deleteHistory, args: args),
+            (sql: deleteDomains, args: args)])
+    }
+
     public func removeHistoryFromDate(_ date: Date) -> Success {
         let visitTimestamp = date.toMicrosecondTimestamp()
 
@@ -486,6 +502,11 @@ extension SQLiteHistory: BrowserHistory {
             // We've probably deleted a lot of stuff. Vacuum now to recover the space.
             >>> effect({ self.db.vacuum() })
     }
+
+    public func clearSearchHistory() -> Success {
+        return db.run("DELETE FROM history WHERE url LIKE \"search://%\"")
+    }
+
 
     func recordVisitedSite(_ site: Site) -> Success {
         // Don't store visits to sites with about: protocols
@@ -603,6 +624,32 @@ extension SQLiteHistory: BrowserHistory {
         return self.db.runQueryConcurrently(topSitesQuery, args: [limit], factory: SQLiteHistory.iconHistoryMetadataColumnFactory)
     }
 
+    public func getDomainProtocol(_ domainName: String) -> Deferred<Maybe<String>> {
+
+        let sql = """
+            SELECT
+                DISTINCT(substr(history.url, 0, instr(history.url, ":"))) as protocol,
+                COUNT(*) as count
+            FROM history
+            INNER JOIN domains ON domains.id = history.domain_id
+            WHERE domains.domain = ?
+                AND history.is_deleted = 0
+                AND history.url NOT LIKE 'search://%'
+            GROUP BY protocol
+            ORDER BY count DESC
+        """
+
+        let factory: (SDRow) -> String = { return $0["protocol"] as! String }
+
+        return db.runQueryConcurrently(sql, args: [domainName], factory: factory)
+            >>== { cursor in
+                if cursor.count == 0 {
+                    return deferMaybe("http")
+                }
+                return deferMaybe(cursor[0]!)
+        }
+    }
+
     public func setTopSitesNeedsInvalidation() {
         prefs.setBool(false, forKey: PrefsKeys.KeyTopSitesCacheIsValid)
     }
@@ -626,8 +673,9 @@ extension SQLiteHistory: BrowserHistory {
         }
     }
 
-    public func getSitesByLastVisit(limit: Int, offset: Int) -> Deferred<Maybe<Cursor<Site>>> {
-        let sql = """
+    public func getSitesByLastVisit(limit: Int, offset: Int, domainName: String? = nil) -> Deferred<Maybe<Cursor<Site>>> {
+        var args: Args = []
+        var sql = """
             SELECT
                 history.id AS historyID, history.url, title, guid, domain_id, domain,
                 coalesce(max(CASE visits.is_local WHEN 1 THEN visits.date ELSE 0 END), 0) AS localVisitDate,
@@ -638,6 +686,18 @@ extension SQLiteHistory: BrowserHistory {
                 INNER JOIN (
                     SELECT siteID, max(date) AS latestVisitDate
                     FROM visits
+        """
+
+        if domainName != nil {
+            sql += """
+                    INNER JOIN history ON visits.siteID = history.id
+                    INNER JOIN domains ON domains.id = history.domain_id
+                    WHERE domains.domain = ?
+            """
+            args.append(domainName)
+        }
+
+        sql += """
                     GROUP BY siteID
                     ORDER BY latestVisitDate DESC
                     LIMIT \(limit)
@@ -650,9 +710,28 @@ extension SQLiteHistory: BrowserHistory {
             WHERE (history.is_deleted = 0)
             GROUP BY history.id
             ORDER BY latestVisits.latestVisitDate DESC
-            """
+        """
 
-        return db.runQueryConcurrently(sql, args: nil, factory: SQLiteHistory.iconHistoryColumnFactory)
+        return db.runQueryConcurrently(sql, args: args, factory: SQLiteHistory.iconHistoryColumnFactory)
+    }
+
+    public func getDomainsByLastVisit(limit: Int, offset: Int) -> Deferred<Maybe<Cursor<Domain>>> {
+        let sql = """
+            SELECT
+               domain,
+               max(visits.date) AS latestVisitDate
+            FROM domains
+            INNER JOIN history ON
+                domains.id = history.domain_id
+            INNER JOIN visits ON
+                visits.siteID = history.id
+            GROUP BY domains.id
+            ORDER BY latestVisitDate DESC
+            LIMIT ?
+            OFFSET ?
+        """
+
+        return db.runQueryConcurrently(sql, args: [limit, offset], factory: SQLiteHistory.domainFactory)
     }
 }
 

@@ -11,6 +11,7 @@ private let log = Logger.browserLogger
 
 private let OrderedEngineNames = "search.orderedEngineNames"
 private let DisabledEngineNames = "search.disabledEngineNames"
+private let ResetDisabledEngineNames = "search.reset.disabledEngineNames"
 private let ShowSearchSuggestionsOptIn = "search.suggestions.showOptIn"
 private let ShowSearchSuggestions = "search.suggestions.show"
 private let customSearchEnginesFileName = "customEngines.plist"
@@ -36,19 +37,21 @@ private let customSearchEnginesFileName = "customEngines.plist"
 class SearchEngines {
     fileprivate let prefs: Prefs
     fileprivate let fileAccessor: FileAccessor
+    fileprivate var cliqzSearchEngine: OpenSearchEngine?
 
     init(prefs: Prefs, files: FileAccessor) {
         self.prefs = prefs
         // By default, show search suggestions
         self.shouldShowSearchSuggestions = prefs.boolForKey(ShowSearchSuggestions) ?? true
         self.fileAccessor = files
-        self.disabledEngineNames = getDisabledEngineNames()
         self.orderedEngines = getOrderedEngines()
+        self.cliqzSearchEngine = self.getEnginesForLocale().filter({ $0.engineID == "cliqz" }).first
+        self.disabledEngineNames = getDisabledEngineNames()
     }
 
     var defaultEngine: OpenSearchEngine {
         get {
-            return self.orderedEngines[0]
+            return self.searchEnginesIncludedCliqz[0]
         }
 
         set(defaultEngine) {
@@ -78,8 +81,15 @@ class SearchEngines {
         }
     }
 
+    var searchEnginesIncludedCliqz: [OpenSearchEngine]! {
+        guard let cliqz = self.cliqzSearchEngine else {
+            return self.orderedEngines
+        }
+        return [cliqz] + self.orderedEngines
+    }
+
     var quickSearchEngines: [OpenSearchEngine]! {
-        return self.orderedEngines.filter({ (engine) in !self.isEngineDefault(engine) && self.isEngineEnabled(engine) })
+        return self.searchEnginesIncludedCliqz.filter({ (engine) in !self.isEngineDefault(engine) && self.isEngineEnabled(engine) })
     }
 
     var shouldShowSearchSuggestions: Bool {
@@ -122,15 +132,65 @@ class SearchEngines {
         saveCustomEngines()
     }
 
+    func isSearchEngineRedirectURL(url: URL, query: String) -> Bool {
+        guard let urlHost = (url.host as NSString?)?.deletingPathExtension else {
+            return false
+        }
+
+        if url.scheme == SearchURL.scheme {
+            return true
+        }
+        /// This is a special behavior of Cliqz SERP, which is going to be removed in near future. Until then the App should ignore those urls in history search.
+        if let cliqzMQueriesURL = URL(string: "https://beta.cliqz.com/mqueries"), let host = (cliqzMQueriesURL.host as NSString?)?.deletingPathExtension {
+            if host + cliqzMQueriesURL.path == urlHost + url.path {
+                return true
+            }
+        }
+        for engine in self.searchEnginesIncludedCliqz {
+            guard let searchEngineURL = engine.searchURLForQuery(query as String) else {
+                continue
+            }
+            if let searchEngineURLHost = (searchEngineURL.host as NSString?)?.deletingPathExtension {
+                if searchEngineURLHost + searchEngineURL.path == urlHost + url.path {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
     func queryForSearchURL(_ url: URL?) -> String? {
-        for engine in orderedEngines {
+        for engine in self.searchEnginesIncludedCliqz {
             guard let searchTerm = engine.queryForSearchURL(url) else { continue }
             return searchTerm
+        }
+        if let url = url, let searchUrl = SearchURL(url) {
+            return searchUrl.query
         }
         return nil
     }
 
+    fileprivate func resetDisabledEngineNamesIfNeeded() {
+        let defaultEnabledEnginesIDs = ["google-b-m", "google-b-1-m", "bing", "ddg"]
+        let reset = self.prefs.boolForKey(ResetDisabledEngineNames)
+        if reset == nil || !reset! {
+            var disabledNames = [String]()
+            for engine in self.orderedEngines {
+                guard let engineID = engine.engineID else {
+                    disabledNames.append(engine.shortName)
+                    continue
+                }
+                if !defaultEnabledEnginesIDs.contains(engineID) {
+                    disabledNames.append(engine.shortName)
+                }
+            }
+            self.prefs.setObject(Array(disabledNames), forKey: DisabledEngineNames)
+            self.prefs.setBool(true, forKey: ResetDisabledEngineNames)
+        }
+    }
+
     fileprivate func getDisabledEngineNames() -> [String: Bool] {
+        self.resetDisabledEngineNamesIfNeeded()
         if let disabledEngineNames = self.prefs.stringArrayForKey(DisabledEngineNames) {
             var disabledEngineDict = [String: Bool]()
             for engineName in disabledEngineNames {
@@ -200,8 +260,8 @@ class SearchEngines {
 
     /// Get all known search engines, possibly as ordered by the user.
     fileprivate func getOrderedEngines() -> [OpenSearchEngine] {
-        let locale = Locale(identifier: Locale.preferredLanguages.first ?? Locale.current.identifier)
-        let unorderedEngines = customEngines + SearchEngines.getUnorderedBundledEnginesFor(locale: locale)
+        let defaultSearchEngines = self.getEnginesForLocale()
+        let unorderedEngines = customEngines + defaultSearchEngines.filter({ $0.engineID != "cliqz" })
 
         // might not work to change the default.
         guard let orderedEngineNames = prefs.stringArrayForKey(OrderedEngineNames) else {
@@ -228,5 +288,10 @@ class SearchEngines {
 
             return index1! < index2!
         }
+    }
+
+    private func getEnginesForLocale() -> [OpenSearchEngine] {
+        let locale = Locale(identifier: Locale.preferredLanguages.first ?? Locale.current.identifier)
+        return SearchEngines.getUnorderedBundledEnginesFor(locale: locale)
     }
 }

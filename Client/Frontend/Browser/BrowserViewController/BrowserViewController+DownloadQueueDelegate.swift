@@ -18,7 +18,7 @@ extension BrowserViewController: DownloadQueueDelegate {
                 if buttonPressed, !downloadQueue.isEmpty {
                     downloadQueue.cancelAll()
 
-                    let downloadCancelledToast = ButtonToast(labelText: Strings.DownloadCancelledToastLabelText, backgroundColor: UIColor.Grey60, textAlignment: .center)
+                    let downloadCancelledToast = ButtonToast(labelText: Strings.Downloads.Toast.Cancelled, backgroundColor: UIColor.Grey60, textAlignment: .center)
 
                     self.show(toast: downloadCancelledToast)
                 }
@@ -49,19 +49,21 @@ extension BrowserViewController: DownloadQueueDelegate {
             downloadToast.dismiss(false)
 
             if error == nil {
-                let downloadCompleteToast = ButtonToast(labelText: download.filename, imageName: "check", buttonText: Strings.DownloadsButtonTitle, completion: { buttonPressed in
-                    guard buttonPressed else { return }
-                    let newTab = self.tabManager.addTab()
-                    self.tabManager.selectTab(newTab)
-                    self.homeViewController?.switchView(segment: .downloads)
-                })
-
-                self.show(toast: downloadCompleteToast, duration: DispatchTimeInterval.seconds(8))
+                self.showDownloadsToast(filename: download.filename)
             } else {
-                let downloadFailedToast = ButtonToast(labelText: Strings.DownloadFailedToastLabelText, backgroundColor: UIColor.Grey60, textAlignment: .center)
+                let downloadFailedToast = ButtonToast(labelText: Strings.Downloads.Toast.Failed, backgroundColor: UIColor.Grey60, textAlignment: .center)
 
                 self.show(toast: downloadFailedToast, duration: nil)
             }
         }
     }
+
+    func showDownloadsToast(filename: String) {
+        let downloadCompleteToast = ButtonToast(labelText: filename, imageName: "check", buttonText: Strings.Downloads.Toast.GoToDownloadsButtonTitle, completion: { buttonPressed in
+            guard buttonPressed else { return }
+            self.showDownloads()
+        })
+        self.show(toast: downloadCompleteToast, duration: DispatchTimeInterval.seconds(8))
+    }
+
 }

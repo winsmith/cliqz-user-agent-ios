@@ -14,7 +14,7 @@ class PhotonActionSheet: UIViewController, UITableViewDelegate, UITableViewDataS
 
     private var site: Site?
     private let style: PresentationStyle
-    private var tintColor = UIColor.theme.actionMenu.foreground
+    private var tintColor = Theme.actionMenu.foreground
     private var heightConstraint: Constraint?
     var tableView = UITableView(frame: .zero, style: .grouped)
 
@@ -29,8 +29,8 @@ class PhotonActionSheet: UIViewController, UITableViewDelegate, UITableViewDataS
 
     lazy var closeButton: UIButton = {
         let button = UIButton()
-        button.setTitle(Strings.CloseButtonTitle, for: .normal)
-        button.setTitleColor(UIColor.theme.actionMenu.closeButtonTitleColor, for: .normal)
+        button.setTitle(Strings.PhotonMenu.Close, for: .normal)
+        button.setTitleColor(Theme.actionMenu.closeButtonTitleColor, for: .normal)
         button.layer.cornerRadius = PhotonActionSheetUX.CornerRadius
         button.titleLabel?.font = DynamicFontHelper.defaultHelper.DeviceFontExtraLargeBold
         button.addTarget(self, action: #selector(dismiss), for: .touchUpInside)
@@ -44,7 +44,7 @@ class PhotonActionSheet: UIViewController, UITableViewDelegate, UITableViewDataS
         }
     }
 
-    init(site: Site, actions: [PhotonActionSheetItem], closeButtonTitle: String = Strings.CloseButtonTitle) {
+    init(site: Site, actions: [PhotonActionSheetItem], closeButtonTitle: String = Strings.PhotonMenu.Close) {
         self.site = site
         self.actions = [actions]
         self.style = .centered
@@ -52,7 +52,7 @@ class PhotonActionSheet: UIViewController, UITableViewDelegate, UITableViewDataS
         self.closeButton.setTitle(closeButtonTitle, for: .normal)
     }
 
-    init(title: String? = nil, actions: [[PhotonActionSheetItem]], closeButtonTitle: String = Strings.CloseButtonTitle, style presentationStyle: UIModalPresentationStyle? = nil) {
+    init(title: String? = nil, actions: [[PhotonActionSheetItem]], closeButtonTitle: String = Strings.PhotonMenu.Close, style presentationStyle: UIModalPresentationStyle? = nil) {
         self.actions = actions
         if let presentationStyle = presentationStyle {
             self.style = presentationStyle == .popover ? .popover : .bottom
@@ -85,7 +85,7 @@ class PhotonActionSheet: UIViewController, UITableViewDelegate, UITableViewDataS
         // In a popover the popover provides the blur background
         // Not using a background color allows the view to style correctly with the popover arrow
         if self.popoverPresentationController == nil {
-            let blurEffect = UIBlurEffect(style: UIColor.theme.actionMenu.iPhoneBackgroundBlurStyle)
+            let blurEffect = UIBlurEffect(style: Theme.actionMenu.iPhoneBackgroundBlurStyle)
             let blurEffectView = UIVisualEffectView(effect: blurEffect)
             tableView.backgroundView = blurEffectView
         }
@@ -103,9 +103,9 @@ class PhotonActionSheet: UIViewController, UITableViewDelegate, UITableViewDataS
         }
 
         if style == .popover {
-            self.actions = actions.map({ $0.reversed() }).reversed()
             tableView.snp.makeConstraints { make in
-                make.edges.equalTo(self.view)
+                make.top.bottom.equalTo(self.view)
+                make.width.equalTo(350)
             }
         } else {
             tableView.snp.makeConstraints { make in
@@ -124,19 +124,19 @@ class PhotonActionSheet: UIViewController, UITableViewDelegate, UITableViewDataS
     func applyTheme() {
 
         if self.popoverPresentationController == nil {
-            let blurEffect = UIBlurEffect(style: UIColor.theme.actionMenu.iPhoneBackgroundBlurStyle)
+            let blurEffect = UIBlurEffect(style: Theme.actionMenu.iPhoneBackgroundBlurStyle)
             let blurEffectView = UIVisualEffectView(effect: blurEffect)
             self.tableView.backgroundView = blurEffectView
         }
 
         if style == .popover {
-            view.backgroundColor = UIColor.theme.browser.background.withAlphaComponent(0.7)
+            view.backgroundColor = Theme.browser.background.withAlphaComponent(0.7)
         } else {
-            tableView.backgroundView?.backgroundColor = UIColor.theme.actionMenu.iPhoneBackground
+            tableView.backgroundView?.backgroundColor = Theme.actionMenu.iPhoneBackground
         }
 
-        tintColor = UIColor.theme.actionMenu.foreground
-        closeButton.backgroundColor = UIColor.theme.actionMenu.closeButtonBackground
+        tintColor = Theme.actionMenu.foreground
+        closeButton.backgroundColor = Theme.actionMenu.closeButtonBackground
 
         tableView.reloadData()
     }
@@ -154,6 +154,7 @@ class PhotonActionSheet: UIViewController, UITableViewDelegate, UITableViewDataS
         tableView.delegate = self
         tableView.dataSource = self
         tableView.keyboardDismissMode = .onDrag
+        tableView.register(PhotonActionSheetCollectionCell.self, forCellReuseIdentifier: PhotonActionSheetUX.CollectionCellName)
         tableView.register(PhotonActionSheetCell.self, forCellReuseIdentifier: PhotonActionSheetUX.CellName)
         tableView.register(PhotonCustomViewCell.self, forCellReuseIdentifier: String(describing: PhotonCustomViewCell.self))
         tableView.register(PhotonActionSheetSiteHeaderView.self, forHeaderFooterViewReuseIdentifier: PhotonActionSheetUX.SiteHeaderName)
@@ -176,6 +177,18 @@ class PhotonActionSheet: UIViewController, UITableViewDelegate, UITableViewDataS
         tableView.tableFooterView = footer.clone()
 
         applyTheme()
+
+        DispatchQueue.main.async {
+            // Pick up the correct/final tableview.contentsize in order to set the height.
+            // Without async dispatch, the contentsize is wrong.
+            self.view.setNeedsLayout()
+        }
+    }
+    override func viewWillLayoutSubviews() {
+        super.viewWillLayoutSubviews()
+        if style == .popover {
+            self.preferredContentSize = self.tableView.contentSize
+        }
     }
 
     override func viewDidLayoutSubviews() {
@@ -187,9 +200,6 @@ class PhotonActionSheet: UIViewController, UITableViewDelegate, UITableViewDataS
             heightConstraint?.deactivate()
             // The height of the menu should be no more than 85 percent of the screen
             heightConstraint = make.height.equalTo(min(self.tableView.contentSize.height, maxHeight * 0.90)).constraint
-        }
-        if style == .popover {
-            self.preferredContentSize = self.tableView.contentSize
         }
     }
 
@@ -270,14 +280,45 @@ class PhotonActionSheet: UIViewController, UITableViewDelegate, UITableViewDataS
 
         if action.customView != nil {
             return photonCustomViewCell(for: action, tableView, indexPath)
+        } else if !(action.collectionItems?.isEmpty ?? true) {
+            return photonActionSheetCollectionCell(for: action, tableView, indexPath)
         } else {
             return photonActionSheetCell(for: action, tableView, indexPath)
+        }
+    }
+
+    private func configureRemoveActionIfNeeded(for cell: PhotonActionSheetCell, action: PhotonActionSheetItem) {
+        if action.accessory == .Remove {
+            cell.didRemove = { [weak self] cell in
+                if let indexPath = self?.tableView.indexPath(for: cell), let action = self?.actions[indexPath.section][indexPath.row] {
+                    self?.actions[indexPath.section].remove(at: indexPath.row)
+                    CATransaction.begin()
+                    self?.tableView.beginUpdates()
+                    CATransaction.setCompletionBlock {
+                        self?.view.setNeedsLayout()
+                    }
+                    self?.tableView.deleteRows(at: [indexPath], with: .left)
+                    self?.tableView.endUpdates()
+                    CATransaction.commit()
+                    action.didRemoveHandler?(action)
+                }
+            }
         }
     }
 
     private func photonActionSheetCell(for action: PhotonActionSheetItem,
                                        _ tableView: UITableView, _ indexPath: IndexPath) -> UITableViewCell {
         let cell = tableView.dequeueReusableCell(withIdentifier: PhotonActionSheetUX.CellName, for: indexPath) as! PhotonActionSheetCell
+        cell.tintColor = self.tintColor
+        cell.configure(with: action)
+        self.configureRemoveActionIfNeeded(for: cell, action: action)
+        return cell
+    }
+
+    private func photonActionSheetCollectionCell(for action: PhotonActionSheetItem,
+                                                 _ tableView: UITableView, _ indexPath: IndexPath) -> UITableViewCell {
+        let cell = tableView.dequeueReusableCell(withIdentifier: PhotonActionSheetUX.CollectionCellName, for: indexPath) as! PhotonActionSheetCollectionCell
+        cell.delegate = self
         cell.tintColor = self.tintColor
         cell.configure(with: action)
         return cell
@@ -288,7 +329,29 @@ class PhotonActionSheet: UIViewController, UITableViewDelegate, UITableViewDataS
         let cell = tableView.dequeueReusableCell(withIdentifier: String(describing: PhotonCustomViewCell.self), for: indexPath) as! PhotonCustomViewCell
         cell.tintColor = self.tintColor
         cell.customView = action.customView
+        cell.onSizeChange = { [weak self] in
+            CATransaction.begin()
+            CATransaction.setCompletionBlock {
+                self?.view.setNeedsLayout()
+            }
+            self?.tableView.beginUpdates()
+            self?.tableView.endUpdates()
+            CATransaction.commit()
+        }
         return cell
+    }
+
+    func tableView(_ tableView: UITableView, heightForHeaderInSection section: Int) -> CGFloat {
+        if section == 0 {
+            if site != nil {
+                return PhotonActionSheetUX.TitleHeaderSectionHeightWithSite
+            } else if title != nil {
+                return PhotonActionSheetUX.TitleHeaderSectionHeight
+            }
+            return 6
+        }
+
+        return PhotonActionSheetUX.SeparatorRowHeight
     }
 
     func tableView(_ tableView: UITableView, viewForHeaderInSection section: Int) -> UIView? {
@@ -321,11 +384,16 @@ class PhotonActionSheet: UIViewController, UITableViewDelegate, UITableViewDataS
     }
 
     func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
-        let action = actions[indexPath.section][indexPath.row]
-        if action.customView != nil {
+        guard let section = actions[safe: indexPath.section], let action = section[safe: indexPath.row] else {
+            return PhotonActionSheetUX.RowHeight
+        }
+        if let custom = action.customHeight {
+            return custom(action)
+        }
+        if action.customView != nil || action.collectionItems != nil {
             return UITableView.automaticDimension
         } else {
-            return tableView.estimatedRowHeight
+            return PhotonActionSheetUX.RowHeight
         }
     }
 
@@ -337,4 +405,16 @@ class PhotonActionSheet: UIViewController, UITableViewDelegate, UITableViewDataS
         }
         return view
     }
+}
+
+extension PhotonActionSheet: PhotonActionSheetCollectionCellDelegate {
+
+    func collectionCellDidSelectItem(item: PhotonActionSheetItem) {
+        self.dismiss(nil)
+        guard let handler = item.handler else {
+            return
+        }
+        handler(item)
+    }
+
 }

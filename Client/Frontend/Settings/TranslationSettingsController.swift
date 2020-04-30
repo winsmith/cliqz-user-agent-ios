@@ -7,7 +7,6 @@ import Shared
 
 class TranslationSettingsController: ThemedTableViewController {
     struct UX {
-        static var rowHeight: CGFloat = 70
         static var footerFontSize: CGFloat = 12
     }
 
@@ -31,16 +30,16 @@ class TranslationSettingsController: ThemedTableViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        title = Strings.SettingTranslateSnackBarTitle
+        title = Strings.Settings.TranslateSnackBar.Title
         tableView.accessibilityIdentifier = "Translate.Setting.Options"
-        tableView.backgroundColor = UIColor.theme.tableView.headerBackground
+        tableView.backgroundColor = Theme.tableView.headerBackground
 
         let headerFooterFrame = CGRect(width: self.view.frame.width, height: SettingsUX.TableViewHeaderFooterHeight)
         let headerView = ThemedTableSectionHeaderFooterView(frame: headerFooterFrame)
         headerView.showTopBorder = false
         headerView.showBottomBorder = true
         tableView.tableHeaderView = headerView
-        headerView.titleLabel.text = Strings.SettingTranslateSnackBarSectionHeader
+        headerView.titleLabel.text = Strings.Settings.TranslateSnackBar.SectionHeader
     }
 
     override func tableView(_ tableView: UITableView, viewForFooterInSection section: Int) -> UIView? {
@@ -49,14 +48,14 @@ class TranslationSettingsController: ThemedTableViewController {
         let footer = UIView()
         let label = UILabel()
         footer.addSubview(label)
-        label.text = Strings.SettingTranslateSnackBarSectionFooter
+        label.text = Strings.Settings.TranslateSnackBar.SectionFooter
         label.numberOfLines = 0
         label.snp.makeConstraints { make in
             make.top.equalToSuperview().inset(4)
             make.left.right.equalToSuperview().inset(16)
         }
         label.font = UIFont.systemFont(ofSize: UX.footerFontSize)
-        label.textColor = UIColor.theme.tableView.headerTextLight
+        label.textColor = Theme.tableView.headerTextLight
         return footer
     }
 
@@ -76,15 +75,15 @@ class TranslationSettingsController: ThemedTableViewController {
         switch section {
         case .translationOnOff:
             if indexPath.row == 0 {
-                cell.textLabel?.text = Strings.SettingTranslateSnackBarSwitchTitle
-                cell.detailTextLabel?.text = Strings.SettingTranslateSnackBarSwitchSubtitle
-                cell.detailTextLabel?.numberOfLines = 4
-                cell.detailTextLabel?.minimumScaleFactor = 0.5
-                cell.detailTextLabel?.adjustsFontSizeToFitWidth = true
+                cell.titleLabel.text = Strings.Settings.TranslateSnackBar.SwitchTitle
+                cell.detailLabel.text = Strings.Settings.TranslateSnackBar.SwitchSubtitle
+                cell.detailLabel.numberOfLines = 4
+                cell.detailLabel.minimumScaleFactor = 0.5
+                cell.detailLabel.adjustsFontSizeToFitWidth = true
 
                 let control = UISwitchThemed()
                 control.accessibilityIdentifier = "TranslateSwitchValue"
-                control.onTintColor = UIColor.theme.tableView.controlTint
+                control.onTintColor = Theme.tableView.controlTint
                 control.addTarget(self, action: #selector(switchValueChanged), for: .valueChanged)
                 control.isOn = setting.translateOnOff
 
@@ -99,7 +98,7 @@ class TranslationSettingsController: ThemedTableViewController {
 
         case .lightDarkPicker:
             let thisService = setting.list[indexPath.row]
-            cell.textLabel?.text = thisService.name
+            cell.titleLabel.text = thisService.name
 
             let selectedService = setting.useTranslationService
             if thisService.id == selectedService.id {
@@ -124,10 +123,6 @@ class TranslationSettingsController: ThemedTableViewController {
             return setting.list.count
         }
         return 0
-    }
-
-    override func tableView(_ tableView: UITableView, heightForRowAt indexPath: IndexPath) -> CGFloat {
-        return indexPath.section == Section.translationOnOff.rawValue ? UX.rowHeight : super.tableView(tableView, heightForRowAt: indexPath)
     }
 
     override func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {

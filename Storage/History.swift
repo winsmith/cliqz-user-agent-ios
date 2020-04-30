@@ -20,13 +20,17 @@ open class IgnoredSiteError: MaybeErrorType {
 public protocol BrowserHistory {
     @discardableResult func addLocalVisit(_ visit: SiteVisit) -> Success
     func clearHistory() -> Success
+    func clearSearchHistory() -> Success
     @discardableResult func removeHistoryForURL(_ url: String) -> Success
+    @discardableResult func removeAllTracesForDomain(_ url: String) -> Success
     func removeHistoryFromDate(_ date: Date) -> Success
     func removeSiteFromTopSites(_ site: Site) -> Success
     func removeHostFromTopSites(_ host: String) -> Success
     func getFrecentHistory() -> FrecentHistory
-    func getSitesByLastVisit(limit: Int, offset: Int) -> Deferred<Maybe<Cursor<Site>>>
+    func getSitesByLastVisit(limit: Int, offset: Int, domainName: String?) -> Deferred<Maybe<Cursor<Site>>>
+    func getDomainsByLastVisit(limit: Int, offset: Int) -> Deferred<Maybe<Cursor<Domain>>>
     func getTopSitesWithLimit(_ limit: Int) -> Deferred<Maybe<Cursor<Site>>>
+    func getDomainProtocol(_ domainName: String) -> Deferred<Maybe<String>>
     func setTopSitesNeedsInvalidation()
     func setTopSitesCacheSize(_ size: Int32)
     func clearTopSitesCache() -> Success
@@ -36,6 +40,7 @@ public protocol BrowserHistory {
     func addPinnedTopSite(_ site: Site) -> Success
     func getPinnedTopSites() -> Deferred<Maybe<Cursor<Site>>>
     func isPinnedTopSite(_ url: String) -> Deferred<Maybe<Bool>>
+    func clearPinnedSitesCache() -> Success
 }
 
 /**

@@ -10,40 +10,33 @@ import Foundation
 import React
 import Storage
 
-class HomeView: UIView, ReactViewTheme {
+class HomeView: UIView {
     private var speedDials: [Site]?
     private var pinnedSites: [Site]?
-    private lazy var reactView: UIView = {
-        func toDial(site: Site) -> [String: String] {
-            return [
-                "url": site.url,
-                "title": site.title,
-            ]
-        }
-
-        let reactView = RCTRootView(
-            bridge: ReactNativeBridge.sharedInstance.bridge,
-            moduleName: "Home",
-            initialProperties: [
-                "theme": Self.getTheme(),
-                "speedDials": self.speedDials!.map(toDial),
-                "pinnedSites": self.pinnedSites!.map(toDial),
-            ]
-        )
-
-        reactView.backgroundColor = .clear
-        return reactView
-    }()
+    private var isNewsEnabled = true
+    private var isNewsImagesEnabled = true
+    private var reactView: UIView?
+    private var height: Int?
+    private var toolbarHeight: CGFloat
 
     override init(frame: CGRect) {
+        self.toolbarHeight = 0
         super.init(frame: frame)
     }
 
-    convenience init(speedDials: [Site], pinnedSites: [Site]) {
+    convenience init(
+        toolbarHeight: CGFloat,
+        speedDials: [Site],
+        pinnedSites: [Site],
+        isNewsEnabled: Bool,
+        isNewsImagesEnabled: Bool
+    ) {
         self.init(frame: .zero)
+        self.toolbarHeight = toolbarHeight
         self.pinnedSites = pinnedSites
         self.speedDials = speedDials
-        self.addSubview(self.reactView)
+        self.isNewsEnabled = isNewsEnabled
+        self.isNewsImagesEnabled = isNewsImagesEnabled
     }
 
     required init(coder aDecoder: NSCoder) {
@@ -51,25 +44,38 @@ class HomeView: UIView, ReactViewTheme {
     }
 
     override func layoutSubviews() {
+        let height = Int(self.bounds.height)
+        if height == self.height ?? 0 {
+            super.layoutSubviews()
+            return
+        } else {
+            self.height = height
+        }
+
+        if let reactView = self.reactView {
+            reactView.removeFromSuperview()
+            self.reactView = nil
+        }
+
+        let reactView = RCTRootView(
+            bridge: ReactNativeBridge.sharedInstance.bridge,
+            moduleName: "Home",
+            initialProperties: [
+                "speedDials": self.speedDials!.map { $0.toDict() },
+                "pinnedSites": self.pinnedSites!.map { $0.toDict() },
+                "isNewsEnabled": self.isNewsEnabled,
+                "isNewsImagesEnabled": self.isNewsImagesEnabled,
+                "height": height,
+                "toolbarHeight": self.toolbarHeight,
+            ]
+        )
+
+        reactView.backgroundColor = .clear
+        reactView.frame = self.bounds
+        self.reactView = reactView
+
+        self.addSubview(reactView)
+
         super.layoutSubviews()
-        self.reactView.frame = self.bounds
-    }
-}
-
-// MARK: - Themeable
-extension HomeView: Themeable {
-    func applyTheme() {
-        updateTheme()
-    }
-}
-
-// MARK: - Private API
-extension HomeView: BrowserCoreClient {
-    private func updateTheme() {
-         browserCore.callAction(
-           module: "BrowserCore",
-           action: "changeTheme",
-           args: [Self.getTheme()]
-         )
     }
 }

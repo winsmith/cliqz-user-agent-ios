@@ -6,6 +6,7 @@ import UIKit
 import Shared
 import SnapKit
 import XCGLogger
+import Widgets
 
 private let log = Logger.browserLogger
 
@@ -29,6 +30,8 @@ private struct TabLocationViewUX {
     static let TPIconSize: CGFloat = 24
     static let ButtonSize: CGFloat = 44
     static let URLBarPadding = 4
+    static let PISeparator: CGFloat = 3
+    static let CancelButtonWidth: CGFloat = 36
 }
 
 class TabLocationView: UIView {
@@ -40,48 +43,49 @@ class TabLocationView: UIView {
     fileprivate let menuBadge = BadgeWithBackdrop(imageName: "menuBadge", backdropCircleSize: 32)
 
     @objc dynamic var baseURLFontColor: UIColor = TabLocationViewUX.BaseURLFontColor {
-        didSet { updateTextWithURL() }
+        didSet { updateTextWithURL(text: self.urlbarText) }
     }
 
     var url: URL? {
         didSet {
             self.updateLockImageView()
-            self.updateTextWithURL()
+            if self.url == nil {
+                // Align left only for placeholder.
+                self.urlTextLabelAlignLeft(duration: 0.0)
+            } else {
+                self.urlTextLabelAlignCenter(duration: 0.0)
+            }
+            self.updateTextWithURL(text: self.urlbarText)
             self.updateStackViewSpacing()
-            self.pageOptionsButton.isHidden = (self.url == nil)
-            self.privacyIndicator.isHidden = self.url == nil
+            let isInternalURL = self.isInternalURL(self.url)
+            self.pageOptionsButton.isHidden = isInternalURL
+            self.privacyIndicator.isHidden = isInternalURL
             setNeedsUpdateConstraints()
         }
     }
 
     lazy var placeholder: NSAttributedString = {
-        let placeholderText = NSLocalizedString("Search or enter address", comment: "The text shown in the URL bar on about:home")
-        return NSAttributedString(string: placeholderText, attributes: [NSAttributedString.Key.foregroundColor: UIColor.theme.textField.placeholder])
+        return NSAttributedString(
+            string: Strings.UrlBar.Placeholder,
+            attributes: [NSAttributedString.Key.foregroundColor: Theme.textField.placeholder])
     }()
 
-    lazy var urlTextField: UITextField = {
-        let urlTextField = DisplayTextField()
-
-        // Prevent the field from compressing the toolbar buttons on the 4S in landscape.
-        urlTextField.setContentCompressionResistancePriority(UILayoutPriority(rawValue: 250), for: .horizontal)
-        urlTextField.attributedPlaceholder = self.placeholder
-        urlTextField.accessibilityIdentifier = "url"
-        urlTextField.accessibilityActionsSource = self
-        urlTextField.font = UIConstants.DefaultChromeFont
-        urlTextField.backgroundColor = .clear
-
-        // Remove the default drop interaction from the URL text field so that our
-        // custom drop interaction on the BVC can accept dropped URLs.
-        if let dropInteraction = urlTextField.textDropInteraction {
-            urlTextField.removeInteraction(dropInteraction)
-        }
-
-        return urlTextField
+    lazy var urlTextLabel: UILabel = {
+        let label = DisplayTextLabel()
+        label.accessibilityIdentifier = "url"
+        label.accessibilityActionsSource = self
+        label.font = UIConstants.DefaultChromeFont
+        label.backgroundColor = .clear
+        label.accessibilityLabel = "Address Bar"
+        label.textAlignment = .left
+        label.textColor = Theme.textField.placeholder
+        label.lineBreakMode = .byCharWrapping
+        return label
     }()
 
     fileprivate lazy var lockImageView: UIImageView = {
         let lockImageView = UIImageView(image: UIImage.templateImageNamed("lock_not_verified"))
-        lockImageView.tintColor = UIColor.theme.textField.textAndTint
+        lockImageView.tintColor = Theme.textField.textAndTint
         lockImageView.isAccessibilityElement = true
         lockImageView.contentMode = .center
         lockImageView.accessibilityLabel = NSLocalizedString("Secure connection", comment: "Accessibility label for the lock icon, which is only present if the connection is secure")
@@ -90,10 +94,12 @@ class TabLocationView: UIView {
 
     fileprivate func updateLockImageView() {
         let wasHidden = lockImageView.isHidden
-        lockImageView.isHidden = (url == nil)
+        lockImageView.isHidden = self.isInternalURL(self.url)
+
         if wasHidden != lockImageView.isHidden {
             UIAccessibility.post(notification: UIAccessibility.Notification.layoutChanged, argument: nil)
         }
+
         if self.url?.scheme != "https" {
             self.lockImageView.image = UIImage.templateImageNamed("lock_not_verified")
         } else {
@@ -101,8 +107,8 @@ class TabLocationView: UIView {
         }
     }
 
-    lazy var privacyIndicator: PrivacyIndicatorView = {
-        let indicator = PrivacyIndicatorView()
+    lazy var privacyIndicator: PrivacyIndicator.Widget = {
+        let indicator = PrivacyIndicator.Widget()
         indicator.onTapBlock = { () -> Void in self.delegate?.tabLocationViewDidTapShield(self) }
         return indicator
     }()
@@ -142,22 +148,36 @@ class TabLocationView: UIView {
 
         let privacyIndicatorSeparator = UIView()
         privacyIndicatorSeparator.snp.makeConstraints { make in
-            make.width.equalTo(3)
+            make.width.equalTo(TabLocationViewUX.PISeparator)
         }
 
-        let subviews = [frontSpaceView, privacyIndicator, privacyIndicatorSeparator, lockImageView, urlTextField, pageOptionsButton]
+        let view = UIView()
+        view.clipsToBounds = true
+        view.backgroundColor = .clear
+        view.addSubview(urlTextLabel)
+        self.urlTextLabel.snp.makeConstraints { (make) in
+            let imageSize = self.isInternalURL(self.url) ? 0 : self.lockImageView.image?.size.width ?? TabLocationViewUX.StatusIconSize
+            let diff = TabLocationViewUX.ButtonSize - TabLocationViewUX.TPIconSize - TabLocationViewUX.Spacing - TabLocationViewUX.PISeparator
+            make.centerX.equalToSuperview().offset((imageSize + diff) / 2)
+            make.top.bottom.equalToSuperview()
+            make.right.lessThanOrEqualToSuperview()
+        }
+        view.addSubview(lockImageView)
+        self.lockImageView.snp.makeConstraints { (make) in
+            make.left.greaterThanOrEqualToSuperview()
+            make.right.equalTo(self.urlTextLabel.snp.left)
+            make.top.bottom.equalToSuperview()
+            make.width.equalTo(self.isInternalURL(self.url) ? 0 : TabLocationViewUX.StatusIconSize)
+            make.height.equalTo(TabLocationViewUX.ButtonSize)
+        }
+        let subviews = [frontSpaceView, privacyIndicator, privacyIndicatorSeparator, view, pageOptionsButton]
         contentView = UIStackView(arrangedSubviews: subviews)
         contentView.distribution = .fill
         contentView.alignment = .center
         addSubview(contentView)
 
         contentView.snp.makeConstraints { make in
-            make.edges.equalTo(self)
-        }
-
-        lockImageView.snp.makeConstraints { make in
-            make.width.equalTo(TabLocationViewUX.StatusIconSize)
-            make.height.equalTo(TabLocationViewUX.ButtonSize)
+            make.top.left.bottom.right.equalTo(self)
         }
 
         privacyIndicator.snp.makeConstraints { make in
@@ -189,7 +209,7 @@ class TabLocationView: UIView {
 
     override var accessibilityElements: [Any]? {
         get {
-            return [lockImageView, urlTextField, pageOptionsButton].filter { !$0.isHidden }
+            return [lockImageView, urlTextLabel, pageOptionsButton].filter { !$0.isHidden }
         }
         set {
             super.accessibilityElements = newValue
@@ -197,7 +217,7 @@ class TabLocationView: UIView {
     }
 
     func overrideAccessibility(enabled: Bool) {
-        [lockImageView, urlTextField, pageOptionsButton].forEach {
+        [lockImageView, urlTextLabel, pageOptionsButton].forEach {
             $0.isAccessibilityElement = enabled
         }
     }
@@ -217,19 +237,113 @@ class TabLocationView: UIView {
     }
 
     @objc func tapLocation(_ recognizer: UITapGestureRecognizer) {
-        delegate?.tabLocationViewDidTapLocation(self)
+        self.animateToBecomeFirstResponder {
+            self.delegate?.tabLocationViewDidTapLocation(self)
+        }
     }
 
-    fileprivate func updateTextWithURL() {
-        urlTextField.text = url?.absoluteString
-        // remove https:// (the scheme) from the url when displaying
-        if let scheme = url?.scheme, let range = url?.absoluteString.range(of: "\(scheme)://") {
-            urlTextField.text = url?.absoluteString.replacingCharacters(in: range, with: "")
+    func animateToBecomeFirstResponder(duration: TimeInterval = 0.2, completion: (() -> Void)? = nil) {
+        self.backgroundColor = Theme.textField.backgroundInOverlay
+        self.urlTextLabelAlignLeft(duration: duration, completion: completion)
+        let animation = CATransition()
+        animation.timingFunction = CAMediaTimingFunction(name: CAMediaTimingFunctionName.easeInEaseOut)
+        animation.type = .fade
+        animation.subtype = .fromTop
+        animation.duration = duration
+        self.urlTextLabel.layer.add(animation, forKey: "kCATransitionFade")
+        self.updateTextWithURL(text: self.url?.absoluteString)
+    }
+
+    func animateToResignFirstResponder(duration: TimeInterval = 0.2) {
+        guard let _ = self.url else {
+            return
+        }
+        self.urlTextLabelAlignCenter(duration: duration)
+        let animation = CATransition()
+        animation.timingFunction = CAMediaTimingFunction(name: CAMediaTimingFunctionName.easeInEaseOut)
+        animation.type = .fade
+        animation.subtype = .fromTop
+        animation.duration = duration
+        self.urlTextLabel.layer.add(animation, forKey: "kCATransitionFade")
+        self.updateTextWithURL(text: self.urlbarText)
+    }
+
+    private func isInternalURL(_ url: URL?) -> Bool {
+        return url == nil || SearchURL.isValid(url: url)
+    }
+
+    private var urlbarText: String {
+        guard let url = self.url else { return "" }
+        if let searchUrl = SearchURL(url) {
+            return searchUrl.query
+        }
+        if url.isHostIPAddress || url.isIPv6 || url.isFileURL {
+            return url.host ?? ""
+        }
+        return url.publicSuffix(additionalPartCount: 1) ?? ""
+    }
+
+    private func urlTextLabelAlignCenter(duration: TimeInterval = 0.2, completion: (() -> Void)? = nil) {
+        self.contentView.insertArrangedSubview(self.privacyIndicator, at: 1)
+        self.urlTextLabel.snp.remakeConstraints { (make) in
+            let imageSize = self.isInternalURL(self.url) ? 0 : self.lockImageView.image?.size.width ?? TabLocationViewUX.StatusIconSize
+            let diff = TabLocationViewUX.ButtonSize - TabLocationViewUX.TPIconSize - TabLocationViewUX.Spacing - TabLocationViewUX.PISeparator
+            make.centerX.equalToSuperview().offset((imageSize + diff) / 2)
+            make.top.bottom.equalToSuperview()
+            make.right.lessThanOrEqualToSuperview()
+        }
+        self.lockImageView.snp.remakeConstraints { (make) in
+            make.left.greaterThanOrEqualToSuperview()
+            make.right.equalTo(self.urlTextLabel.snp.left)
+            make.top.bottom.equalToSuperview()
+            make.width.equalTo(self.isInternalURL(self.url) ? 0 : TabLocationViewUX.StatusIconSize)
+            make.height.equalTo(TabLocationViewUX.ButtonSize)
+        }
+        UIView.animate(withDuration: duration, animations: {
+            self.lockImageView.isHidden = self.isInternalURL(self.url)
+            self.contentView.layoutIfNeeded()
+        }) { (_) in
+            completion?()
+        }
+    }
+
+    private func urlTextLabelAlignLeft(duration: TimeInterval = 0.2, completion: (() -> Void)? = nil) {
+        self.privacyIndicator.removeFromSuperview()
+        self.urlTextLabel.snp.remakeConstraints { (make) in
+            make.right.equalToSuperview().offset(-(TabLocationViewUX.CancelButtonWidth + UIConstants.URLBarViewHeight / 2))
+            make.top.bottom.equalToSuperview()
+        }
+        self.lockImageView.snp.remakeConstraints { (make) in
+            make.left.equalToSuperview()
+            make.right.equalTo(self.urlTextLabel.snp.left).offset(self.isInternalURL(self.url) ? -11.5 : -4)
+            make.top.bottom.equalToSuperview()
+            make.width.equalTo(0)
+            make.height.equalTo(TabLocationViewUX.ButtonSize)
+        }
+        self.lockImageView.isHidden = true
+        if duration != 0.0 {
+            UIView.animate(withDuration: duration, animations: {
+                self.contentView.layoutIfNeeded()
+            }) { (_) in
+                completion?()
+            }
+        } else {
+            completion?()
+        }
+    }
+
+    fileprivate func updateTextWithURL(text: String?) {
+        if let text = text, !text.isEmpty {
+            self.urlTextLabel.text = text
+            self.urlTextLabel.textColor = Theme.textField.textAndTint
+        } else {
+            self.urlTextLabel.attributedText = self.placeholder
+            self.urlTextLabel.textColor = Theme.textField.placeholder
         }
     }
 
     fileprivate func updateStackViewSpacing() {
-        let leftPadding = self.url == nil ? TabLocationViewUX.PlaceholderLefPadding : TabLocationViewUX.Spacing
+        let leftPadding = self.isInternalURL(self.url) ? 0 : TabLocationViewUX.Spacing
         let frontView = self.contentView.arrangedSubviews.first
         if frontView?.frame.size.width != leftPadding {
             frontView?.snp.remakeConstraints({ (make) in
@@ -270,7 +384,7 @@ extension TabLocationView: UIDragInteractionDelegate {
 
 extension TabLocationView: AccessibilityActionsSource {
     func accessibilityCustomActionsForView(_ view: UIView) -> [UIAccessibilityCustomAction]? {
-        if view === urlTextField {
+        if view === urlTextLabel {
             return delegate?.tabLocationViewLocationAccessibilityActions(self)
         }
         return nil
@@ -279,13 +393,12 @@ extension TabLocationView: AccessibilityActionsSource {
 
 extension TabLocationView: Themeable {
     func applyTheme() {
-        backgroundColor = UIColor.theme.textField.background
-        urlTextField.textColor = UIColor.theme.textField.textAndTint
+        backgroundColor = Theme.textField.background
+        urlTextLabel.textColor = self.isInternalURL(self.url) ? Theme.textField.placeholder : Theme.textField.textAndTint
 
-        pageOptionsButton.selectedTintColor = UIColor.theme.urlbar.pageOptionsSelected
-        pageOptionsButton.unselectedTintColor = UIColor.theme.urlbar.pageOptionsUnselected
+        pageOptionsButton.selectedTintColor = Theme.urlbar.pageOptionsSelected
+        pageOptionsButton.unselectedTintColor = Theme.urlbar.pageOptionsUnselected
         pageOptionsButton.tintColor = pageOptionsButton.unselectedTintColor
-
         menuBadge.badge.tintBackground(color: .clear)
     }
 }
@@ -298,8 +411,9 @@ extension TabLocationView: TabEventHandler {
     private func updateBlockerStatus(forTab tab: Tab) {
         assertIsMainThread("UI changes must be on the main thread")
         guard let blocker = tab.contentBlocker else { return }
-        privacyIndicator.update(with: blocker.stats)
-        privacyIndicator.blocker = blocker
+        let (arcs, strike) = PrivacyIndicatorTransformation
+            .transform(status: blocker.status, stats: blocker.stats)
+        self.privacyIndicator.update(arcs: arcs, strike: strike)
     }
 
     func tabDidGainFocus(_ tab: Tab) {
@@ -316,7 +430,7 @@ extension TabLocationView: TabEventHandler {
     }
 }
 
-private class DisplayTextField: UITextField {
+private class DisplayTextLabel: UILabel {
     weak var accessibilityActionsSource: AccessibilityActionsSource?
 
     override var accessibilityCustomActions: [UIAccessibilityCustomAction]? {
@@ -328,7 +442,4 @@ private class DisplayTextField: UITextField {
         }
     }
 
-    fileprivate override var canBecomeFirstResponder: Bool {
-        return false
-    }
 }

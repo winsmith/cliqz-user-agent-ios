@@ -1,40 +1,18 @@
-/* eslint-disable react/prop-types */
 import React from 'react';
 import {
   StyleSheet,
   View,
   Text,
   ScrollView,
-  TouchableWithoutFeedback,
   NativeModules,
+  TouchableWithoutFeedback,
 } from 'react-native';
-import SearchUIVertical from 'browser-core-user-agent-ios/build/modules/mobile-cards-vertical/SearchUI';
-import { Provider as CliqzProvider } from 'browser-core-user-agent-ios/build/modules/mobile-cards/cliqz';
-import { Provider as ThemeProvider } from 'browser-core-user-agent-ios/build/modules/mobile-cards-vertical/withTheme';
-import {
-  baseTheme,
-  mergeStyles,
-} from 'browser-core-user-agent-ios/build/modules/mobile-cards-vertical/themes';
-import NativeDrawable, {
-  normalizeUrl,
-} from 'browser-core-user-agent-ios/build/modules/mobile-cards/components/custom/NativeDrawable';
-
+import ResultList from './ResultList';
+import SpeedDial from '../../../components/SpeedDial';
+import NativeDrawable from '../../../components/NativeDrawable';
 import { withTheme } from '../../../contexts/theme';
 import t from '../../../services/i18n';
-
-const getTheme = theme =>
-  mergeStyles(baseTheme, {
-    card: {
-      bgColor: theme.backgroundColor,
-    },
-    snippet: {
-      titleColor: theme.linkColor,
-      urlColor: theme.urlColor,
-      descriptionColor: theme.descriptionColor,
-      visitedTitleColor: theme.visitedColor,
-      separatorColor: theme.separatorColor,
-    },
-  });
+import { resultTitleFontSize } from '../styles';
 
 const getStyles = theme =>
   StyleSheet.create({
@@ -55,22 +33,42 @@ const getStyles = theme =>
       right: 0,
     },
     separator: {
-      height: 0.5,
+      height: 1,
       backgroundColor: theme.separatorColor,
     },
     footer: {
-      height: 50,
-      borderTopColor: theme.separatorColor,
-      borderTopWidth: 1,
+      borderBottomColor: theme.separatorColor,
+      borderBottomWidth: 0,
+      top: -1,
       backgroundColor: theme.backgroundColor,
       alignItems: 'center',
       justifyContent: 'center',
-      borderBottomLeftRadius: 10,
-      borderBottomRightRadius: 10,
+      borderBottomLeftRadius: 17,
+      borderBottomRightRadius: 17,
+      flexDirection: 'row',
+    },
+    showMoreButtonWrapper: {
+      backgroundColor: theme.brandTintColor,
+      borderRadius: 10,
+      paddingVertical: 20,
+      marginVertical: 14,
+      marginHorizontal: 14,
+      flexGrow: 1,
+      flexDirection: 'column',
+    },
+    showMoreButton: {
+      flexDirection: 'row',
+      alignSelf: 'center',
+    },
+    footerIcon: {
+      width: 20,
+      height: 20,
     },
     footerText: {
-      color: theme.textColor,
-      fontSize: 9,
+      color: 'white',
+      alignSelf: 'center',
+      marginLeft: 10,
+      fontSize: resultTitleFontSize,
     },
     noResults: {
       backgroundColor: theme.backgroundColor,
@@ -93,10 +91,16 @@ const getStyles = theme =>
       fontSize: 12,
     },
     searchEnginesContainer: {
+      marginTop: 10,
+      marginBottom: 100,
+      textAlign: 'center',
+    },
+    searchEnginesGroupContainer: {
+      flex: 1,
       flexDirection: 'row',
       justifyContent: 'space-evenly',
       marginTop: 10,
-      marginBottom: 100,
+      marginBottom: 10,
       textAlign: 'center',
     },
     searchEngineIcon: {
@@ -116,10 +120,65 @@ const getStyles = theme =>
     },
   });
 
+const BLOCKED_TEMPLATES = ['calculator', 'currency', 'flight'];
+
+function reportSearchStats(insightsModule, searchEngine) {
+  const searchStats = {};
+
+  if (searchEngine.name === 'Cliqz') {
+    searchStats.cliqzSearch = 1;
+  } else {
+    searchStats.otherSearch = 1;
+  }
+
+  insightsModule.action('insertSearchStats', searchStats);
+}
+
+function isResultAllowed({ template, provider, type }) {
+  return (
+    !BLOCKED_TEMPLATES.includes(template) &&
+    type !== 'supplementary-search' &&
+    Boolean(provider) &&
+    provider !== 'rich-header' // promises sometimes arrive to ui
+  );
+}
+
+function groupBy(arr, n) {
+  const group = [];
+  for (let i = 0, j = 0; i < arr.length; i += 1) {
+    if (i >= n && i % n === 0) {
+      j += 1;
+    }
+    group[j] = group[j] || [];
+    group[j].push(arr[i]);
+  }
+  return group;
+}
+
+function handleAutocompletion(url = '', query = '') {
+  const trimmedUrl = url.replace(/http([s]?):\/\/(www.)?/, '').toLowerCase();
+  const searchLower = query.toLowerCase();
+  if (trimmedUrl.startsWith(searchLower)) {
+    NativeModules.AutoCompletion.autoComplete(trimmedUrl);
+  } else {
+    NativeModules.AutoCompletion.autoComplete(query);
+  }
+}
+
+const hideKeyboard = () => NativeModules.BrowserActions.hideKeyboard();
+
 class Results extends React.Component {
   constructor(props) {
     super(props);
     this.scrollRef = React.createRef();
+    this.state = {
+      searchEngines: [],
+    };
+    browser.search.get().then(searchEngines => {
+      this.setState({
+        searchEngines,
+      });
+    });
   }
 
   // eslint-disable-next-line react/no-deprecated
@@ -129,144 +188,181 @@ class Results extends React.Component {
     }
   }
 
-  openSearchEngineLink = async (url, index) => {
-    const { results = {}, query, cliqz } = this.props;
+  openSearchEngineResultsPage = async (searchEngine, query, index) => {
+    const { results = {}, searchModule, insightsModule } = this.props;
     const meta = results.meta || {};
-    await cliqz.mobileCards.openLink(url, {
-      action: 'click',
-      elementName: 'icon',
-      isFromAutoCompletedUrl: false,
-      isNewTab: false,
-      isPrivateMode: false,
-      isPrivateResult: meta.isPrivate,
-      query,
-      isSearchEngine: true,
-      rawResult: {
-        index,
+    const { favIconUrl: url } = searchEngine;
+
+    await searchModule.action(
+      'reportSelection',
+      {
+        action: 'click',
+        elementName: 'icon',
+        isFromAutoCompletedUrl: false,
+        isNewTab: false,
+        isPrivateMode: false,
+        isPrivateResult: meta.isPrivate,
+        query,
+        isSearchEngine: true,
+        rawResult: {
+          index,
+          url,
+          provider: 'instant',
+          type: 'supplementary-search',
+          kind: [`custom-search|{"class":"${searchEngine.name}"}`],
+        },
+        resultOrder: meta.resultOrder,
         url,
-        provider: 'instant',
-        type: 'supplementary-search',
       },
-      resultOrder: meta.resultOrder,
-      url,
+      {
+        contextId: 'mobile-cards',
+      },
+    );
+
+    reportSearchStats(insightsModule, searchEngine);
+
+    browser.search.search({
+      query,
+      engine: searchEngine.name,
     });
   };
 
+  reportHighlight = () => {
+    const { searchModule } = this.props;
+    searchModule.action('reportHighlight');
+  };
+
   render() {
-    const { results: _results, query, theme: _theme, cliqz } = this.props;
+    const {
+      results: _results,
+      query,
+      theme: _theme,
+      searchModule,
+      insightsModule,
+    } = this.props;
     const {
       results: allResults,
       suggestions,
       meta,
       query: resultsQuery,
     } = _results;
-    const results = (allResults || []).filter(r => r.provider !== 'instant');
+    const { searchEngines } = this.state;
+    const results = (allResults || []).filter(isResultAllowed);
     const styles = getStyles(_theme);
-    const theme = getTheme(_theme);
 
     NativeModules.BrowserActions.showQuerySuggestions(
       resultsQuery,
       suggestions,
     );
 
+    if (results[0]) {
+      const { friendlyUrl, text } = results[0];
+      if (friendlyUrl && text) {
+        handleAutocompletion(friendlyUrl, text);
+      }
+    }
+
     return (
       <View style={styles.container}>
-        <CliqzProvider value={cliqz}>
-          <ThemeProvider value={theme}>
-            <ScrollView
-              bounces
-              ref={this.scrollRef}
-              showsVerticalScrollIndicator={false}
-            >
-              <View style={styles.bouncer} />
-              <SearchUIVertical
-                results={results}
-                meta={meta}
-                style={styles.searchUI}
-                cardListStyle={styles.cardListStyle}
-                header={<View />}
-                separator={<View style={styles.separator} />}
-                footer={<View />}
-              />
-              <>
-                {results.length === 0 && (
-                  <View style={styles.noResults}>
-                    <Text style={styles.noResultsText}>
-                      {t('search_no_results')}
+        <ScrollView
+          bounces
+          ref={this.scrollRef}
+          showsVerticalScrollIndicator={false}
+          keyboardDismissMode="on-drag"
+          keyboardShouldPersistTaps="handled"
+          onTouchStart={hideKeyboard}
+          onScrollEndDrag={this.reportHighlight}
+        >
+          <View style={styles.bouncer} />
+          <View
+            accessible={false}
+            accessibilityLabel="search-results"
+            style={styles.searchUI}
+          >
+            <ResultList
+              results={results}
+              meta={meta}
+              style={styles.cardListStyle}
+              header={<View />}
+              separator={<View style={styles.separator} />}
+              footer={<View />}
+              searchModule={searchModule}
+              insightsModule={insightsModule}
+            />
+          </View>
+          <>
+            {results.length === 0 && (
+              <View style={styles.noResults}>
+                <Text style={styles.noResultsText}>
+                  {t('search_no_results')}
+                </Text>
+              </View>
+            )}
+
+            <View style={styles.footer}>
+              <TouchableWithoutFeedback
+                onPress={() =>
+                  this.openSearchEngineResultsPage({ name: 'Cliqz' }, query, 0)
+                }
+              >
+                <View style={styles.showMoreButtonWrapper}>
+                  <View style={styles.showMoreButton}>
+                    <NativeDrawable
+                      style={styles.footerIcon}
+                      source="nav-menu"
+                      color="#ffffff"
+                    />
+                    <Text style={styles.footerText} allowFontScaling={false}>
+                      {t('search_footer')}
                     </Text>
                   </View>
-                )}
-                <View style={styles.footer}>
-                  <Text style={styles.footerText}>{t('search_footer')}</Text>
                 </View>
-                <View style={styles.searchEnginesHeader}>
-                  <Text style={styles.searchEnginesHeaderText}>
-                    {t('search_alternative_search_engines_info')}
-                  </Text>
-                </View>
-                <View style={styles.searchEnginesContainer}>
-                  <TouchableWithoutFeedback
-                    onPress={() =>
-                      this.openSearchEngineLink(
-                        `https://beta.cliqz.com/search?q=${encodeURIComponent(
-                          query,
-                        )}#channel=ios`,
-                        2,
-                      )
-                    }
+              </TouchableWithoutFeedback>
+            </View>
+
+            <View style={styles.searchEnginesHeader}>
+              <Text style={styles.searchEnginesHeaderText}>
+                {t('search_alternative_search_engines_info')}
+              </Text>
+            </View>
+            <View style={styles.searchEnginesContainer}>
+              {groupBy(searchEngines, 3).map(
+                (searchEnginesGroup, groupIndex) => (
+                  <View
+                    style={styles.searchEnginesGroupContainer}
+                    key={searchEnginesGroup.map(e => e.name).join('')}
                   >
-                    <View>
-                      <NativeDrawable
-                        style={styles.searchEngineIcon}
-                        color="#ffffff"
-                        source={normalizeUrl('cliqz.svg')}
+                    {searchEnginesGroup.map((searchEngine, engineIndex) => (
+                      <SpeedDial
+                        key={searchEngine.name}
+                        styles={{
+                          label: {
+                            color: 'white',
+                          },
+                          circle: {
+                            borderColor: `${_theme.separatorColor}44`,
+                          },
+                        }}
+                        speedDial={{
+                          pinned: false,
+                          url: searchEngine.favIconUrl,
+                        }}
+                        onPress={() =>
+                          this.openSearchEngineResultsPage(
+                            searchEngine,
+                            query,
+                            // index 0 is "show more results" Cliqz link
+                            1 + groupIndex * 3 + engineIndex,
+                          )
+                        }
                       />
-                      <Text style={styles.searchEngineText}>Cliqz</Text>
-                    </View>
-                  </TouchableWithoutFeedback>
-                  <TouchableWithoutFeedback
-                    onPress={() =>
-                      this.openSearchEngineLink(
-                        `https://google.com/search?q=${encodeURIComponent(
-                          query,
-                        )}`,
-                        0,
-                      )
-                    }
-                  >
-                    <View>
-                      <NativeDrawable
-                        style={styles.searchEngineIcon}
-                        color="#ffffff"
-                        source={normalizeUrl('google.svg')}
-                      />
-                      <Text style={styles.searchEngineText}>Google</Text>
-                    </View>
-                  </TouchableWithoutFeedback>
-                  <TouchableWithoutFeedback
-                    onPress={() =>
-                      this.openSearchEngineLink(
-                        `https://duckduckgo.com/?q=${encodeURIComponent(
-                          query,
-                        )}`,
-                        1,
-                      )
-                    }
-                  >
-                    <View>
-                      <NativeDrawable
-                        style={styles.searchEngineIcon}
-                        color="#ffffff"
-                        source={normalizeUrl('ddg.svg')}
-                      />
-                      <Text style={styles.searchEngineText}>DuckDuckGo</Text>
-                    </View>
-                  </TouchableWithoutFeedback>
-                </View>
-              </>
-            </ScrollView>
-          </ThemeProvider>
-        </CliqzProvider>
+                    ))}
+                  </View>
+                ),
+              )}
+            </View>
+          </>
+        </ScrollView>
       </View>
     );
   }

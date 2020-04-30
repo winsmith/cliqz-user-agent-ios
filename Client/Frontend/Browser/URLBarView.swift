@@ -41,14 +41,12 @@ protocol URLBarDelegate: AnyObject {
     func urlBarDidPressScrollToTop(_ urlBar: URLBarView)
     func urlBar(_ urlBar: URLBarView, didRestoreText text: String)
     func urlBar(_ urlBar: URLBarView, didEnterText text: String)
-    func urlBar(_ urlBar: URLBarView, didSubmitText text: String)
+    func urlBar(_ urlBar: URLBarView, didSubmitText text: String, completion: String?)
     // Returns either (search query, true) or (url, false).
     func urlBarDisplayTextForURL(_ url: URL?) -> (String?, Bool)
     func urlBarDidLongPressPageOptions(_ urlBar: URLBarView, from button: UIButton)
     func urlBarDidBeginDragInteraction(_ urlBar: URLBarView)
 }
-
-typealias CancelAction = () -> Void
 
 class URLBarView: UIView {
     // Additional UIAppearance-configurable properties
@@ -83,8 +81,6 @@ class URLBarView: UIView {
     var toolbarIsShowing = false
     var topTabsIsShowing = false
 
-    var onCancelAction: CancelAction?
-
     fileprivate var locationTextField: ToolbarTextField?
 
     /// Overlay mode is the state where the lock/reader icons are hidden, the home panels are shown,
@@ -117,6 +113,7 @@ class URLBarView: UIView {
     lazy var tabsButton: TabsButton = {
         let tabsButton = TabsButton.tabTrayButton()
         tabsButton.accessibilityIdentifier = "URLBarView.tabsButton"
+        tabsButton.inTopTabs = false
         return tabsButton
     }()
 
@@ -135,9 +132,9 @@ class URLBarView: UIView {
     fileprivate lazy var cancelButton: UIButton = {
         let cancelButton = UIButton()
         cancelButton.accessibilityIdentifier = "urlBar-cancel"
-        cancelButton.accessibilityLabel = Strings.BackTitle
+        cancelButton.accessibilityLabel = Strings.Hotkeys.BackTitle
         cancelButton.setTitle(NSLocalizedString("Cancel", comment: ""), for: .normal)
-        cancelButton.setTitleColor(UIColor.theme.general.controlTint, for: .normal)
+        cancelButton.setTitleColor(Theme.general.controlTint, for: .normal)
         cancelButton.titleLabel?.font = UIFont.systemFont(ofSize: 14)
         cancelButton.addTarget(self, action: #selector(didClickCancel), for: .touchUpInside)
         cancelButton.alpha = 0
@@ -149,7 +146,7 @@ class URLBarView: UIView {
 
     fileprivate lazy var separator: UIView = {
         let separator = UIView()
-        separator.backgroundColor = UIColor.theme.textField.separator
+        separator.backgroundColor = Theme.textField.separator
         return separator
     }()
 
@@ -174,7 +171,7 @@ class URLBarView: UIView {
         return backButton
     }()
 
-    lazy var actionButtons: [Themeable & UIButton] = [self.tabsButton, self.menuButton, self.forwardButton,
+    lazy var actionButtons: [Themeable & UIButton] = [self.tabsButton, self.searchButton, self.menuButton, self.forwardButton,
                                                       self.backButton, self.stopReloadButton, ]
 
     var currentURL: URL? {
@@ -192,8 +189,8 @@ class URLBarView: UIView {
         }
     }
 
-    fileprivate let privateModeBadge = BadgeWithBackdrop(imageName: "privateModeBadge",
-                                                         backdropCircleColor: UIColor.Defaults.MobilePrivatePurple)
+    fileprivate let privateModeBadge = BadgeWithBackdrop(imageName: "privateModeBadge", backdropCircleColor: UIColor.ForgetMode)
+    fileprivate let whatsNeweBadge = BadgeWithBackdrop(imageName: "menuBadge")
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -210,12 +207,14 @@ class URLBarView: UIView {
         locationContainer.addSubview(cancelButton)
         cancelButton.addSubview(separator)
 
-        [scrollToTopButton, line, tabsButton, progressBar,
+        [scrollToTopButton, line, tabsButton, progressBar, self.searchButton,
          menuButton, forwardButton, backButton, stopReloadButton, locationContainer, ].forEach {
             addSubview($0)
         }
 
         privateModeBadge.add(toParent: self)
+        self.whatsNeweBadge.add(toParent: self)
+        self.whatsNeweBadge.show(false)
 
         helper = TabToolbarHelper(toolbar: self)
         setupConstraints()
@@ -289,6 +288,16 @@ class URLBarView: UIView {
             make.size.equalTo(URLBarViewUX.ButtonHeight)
         }
 
+        self.searchButton.snp.makeConstraints { (make) in
+            if UIDevice.current.isPhone {
+                make.trailing.equalTo(self.tabsButton.snp.leading)
+            } else {
+                make.trailing.equalTo(self.menuButton.snp.leading)
+            }
+            make.centerY.equalTo(self)
+            make.size.equalTo(URLBarViewUX.ButtonHeight)
+        }
+
         tabsButton.snp.makeConstraints { make in
             make.trailing.equalTo(self.menuButton.snp.leading)
             make.centerY.equalTo(self)
@@ -296,6 +305,7 @@ class URLBarView: UIView {
         }
 
         privateModeBadge.layout(onButton: tabsButton)
+        self.whatsNeweBadge.layout(onButton: self.menuButton)
     }
 
     override func updateConstraints() {
@@ -303,11 +313,10 @@ class URLBarView: UIView {
         self.locationContainer.snp.remakeConstraints { make in
             if self.toolbarIsShowing {
                 make.leading.equalTo(self.stopReloadButton.snp.trailing).offset(URLBarViewUX.Padding)
-                make.trailing.equalTo(self.tabsButton.snp.leading).offset(-15)
+                make.trailing.equalTo(self.searchButton.snp.leading).offset(-URLBarViewUX.Padding)
             } else {
                 // Otherwise, left align the location view
-                make.leading.trailing.equalTo(self).inset(UIEdgeInsets(top: 0, left: URLBarViewUX.LocationLeftPadding, bottom: 0,
-                                                                       right: 15))
+                make.leading.trailing.equalTo(self).inset(UIEdgeInsets(top: 0, left: URLBarViewUX.LocationLeftPadding, bottom: 0, right: URLBarViewUX.Padding))
             }
 
             make.centerY.equalTo(self)
@@ -315,6 +324,7 @@ class URLBarView: UIView {
         }
         if inOverlayMode {
             self.cancelButton.snp.remakeConstraints { make in
+                make.centerY.equalTo(self.locationContainer)
                 make.height.equalTo(locationContainer.snp.height)
                 make.trailing.equalTo(locationContainer.snp.trailing)
             }
@@ -324,7 +334,7 @@ class URLBarView: UIView {
             self.locationTextField?.snp.remakeConstraints { make in
                 make.leading.equalTo(self.locationView.snp.leading).offset(15)
                 make.trailing.equalTo(self.cancelButton.snp.leading).offset(-URLBarViewUX.Padding)
-                make.top.equalTo(self.locationView.snp.top)
+                make.top.equalTo(self.locationView.snp.top).offset(2)
                 make.bottom.equalTo(self.locationView.snp.bottom)
             }
         } else {
@@ -388,8 +398,12 @@ class URLBarView: UIView {
         locationTextField.snp.remakeConstraints { make in
             make.leading.equalTo(self.locationView.snp.leading)
             make.trailing.equalTo(self.cancelButton.snp.trailing)
-            make.top.equalTo(self.locationView.snp.top)
+            make.top.equalTo(self.locationView.snp.top).offset(2)
             make.bottom.equalTo(self.locationView.snp.bottom)
+        }
+        // Disable dragging urls on iPhones because it conflicts with editing the text
+        if UIDevice.current.userInterfaceIdiom != .pad {
+            locationTextField.textDragInteraction?.isEnabled = false
         }
 
         locationTextField.applyTheme()
@@ -420,6 +434,10 @@ class URLBarView: UIView {
         updateViewsForOverlayModeAndToolbarChanges()
     }
 
+    func cancel() {
+        self.didClickCancel()
+    }
+
     func updateAlphaForSubviews(_ alpha: CGFloat) {
         locationContainer.alpha = alpha
         self.alpha = alpha
@@ -427,7 +445,7 @@ class URLBarView: UIView {
 
     func updateProgressBar(_ progress: Float) {
         progressBar.alpha = 1
-        progressBar.isHidden = false
+        progressBar.isHidden = self.inOverlayMode
         progressBar.setProgress(progress, animated: !isTransitioning)
     }
 
@@ -479,20 +497,23 @@ class URLBarView: UIView {
                 self.setLocation(locationText, search: search)
             }
         } else {
+            self.locationTextField?.text = locationText
             DispatchQueue.main.async {
-                self.locationTextField?.becomeFirstResponder()
+                guard let textField = self.locationTextField else {
+                    return
+                }
+                textField.becomeFirstResponder()
+                // Moveing text field cursor position to front.
+                textField.selectedTextRange = textField.textRange(from: textField.beginningOfDocument, to: textField.beginningOfDocument)
                 // Need to set location again so text could be immediately selected.
                 self.setLocation(locationText, search: search)
-                self.locationTextField?.selectAll(nil)
+                textField.selectAll(nil)
             }
         }
+
     }
 
     func leaveOverlayMode(didCancel cancel: Bool = false) {
-        if self.onCancelAction != nil {
-            self.onCancelAction?()
-            self.onCancelAction = nil
-        }
         locationTextField?.resignFirstResponder()
         animateToOverlayState(overlayMode: false, didCancel: cancel)
         delegate?.urlBarDidLeaveOverlayMode(self)
@@ -505,6 +526,7 @@ class URLBarView: UIView {
         cancelButton.isHidden = false
         progressBar.isHidden = false
         menuButton.isHidden = !toolbarIsShowing
+        self.searchButton.isHidden = !toolbarIsShowing
         forwardButton.isHidden = !toolbarIsShowing
         backButton.isHidden = !toolbarIsShowing
         tabsButton.isHidden = !toolbarIsShowing || topTabsIsShowing
@@ -517,6 +539,7 @@ class URLBarView: UIView {
         progressBar.alpha = inOverlayMode || didCancel ? 0 : 1
         tabsButton.alpha = inOverlayMode ? 0 : 1
         menuButton.alpha = inOverlayMode ? 0 : 1
+        self.searchButton.alpha = inOverlayMode ? 0 : 1
         forwardButton.alpha = inOverlayMode ? 0 : 1
         backButton.alpha = inOverlayMode ? 0 : 1
         stopReloadButton.alpha = inOverlayMode ? 0 : 1
@@ -530,15 +553,17 @@ class URLBarView: UIView {
             locationTextField?.snp.remakeConstraints { make in
                 make.leading.equalTo(self.locationView.snp.leading)
                 make.trailing.equalTo(self.cancelButton.snp.trailing)
-                make.top.equalTo(self.locationView.snp.top)
+                make.top.equalTo(self.locationView.snp.top).offset(2)
                 make.bottom.equalTo(self.locationView.snp.bottom)
             }
         } else {
             // Shrink the editable text field back to the size of the location view before hiding it.
             locationTextField?.snp.remakeConstraints { make in
-                make.edges.equalTo(self.locationView.urlTextField)
+                make.left.bottom.right.equalTo(self.locationView.urlTextLabel)
+                make.top.equalTo(self.locationView.urlTextLabel).offset(2)
             }
             cancelButton.snp.remakeConstraints { make in
+                make.centerY.equalTo(self.locationContainer)
                 make.height.equalTo(locationContainer.snp.height)
                 make.leading.equalTo(locationView.snp.trailing)
             }
@@ -552,13 +577,14 @@ class URLBarView: UIView {
         cancelButton.isHidden = !inOverlayMode
         progressBar.isHidden = inOverlayMode
         menuButton.isHidden = !toolbarIsShowing || inOverlayMode
+        self.searchButton.isHidden = !toolbarIsShowing || inOverlayMode
         forwardButton.isHidden = !toolbarIsShowing || inOverlayMode
         backButton.isHidden = !toolbarIsShowing || inOverlayMode
         tabsButton.isHidden = !toolbarIsShowing || inOverlayMode || topTabsIsShowing
         stopReloadButton.isHidden = !toolbarIsShowing || inOverlayMode
 
         // badge isHidden is tied to private mode on/off, use alpha to hide in this case
-        [privateModeBadge].forEach {
+        [privateModeBadge, whatsNeweBadge].forEach {
             $0.badge.alpha = (!toolbarIsShowing || inOverlayMode) ? 0 : 1
             $0.backdrop.alpha = (!toolbarIsShowing || inOverlayMode) ? 0 : BadgeWithBackdrop.backdropAlpha
         }
@@ -606,6 +632,17 @@ extension URLBarView: TabToolbarProtocol {
         }
     }
 
+    func whatsNeweBadge(visible: Bool) {
+        if UIDevice.current.isPad {
+            self.whatsNeweBadge.show(visible)
+        }
+    }
+
+    func searchBadge(visible: Bool) {
+        let image = visible ? UIImage.templateImageNamed("AddSearch") : UIImage.templateImageNamed("search")
+        self.searchButton.setImage(image, for: .normal)
+    }
+
     func updateBackStatus(_ canGoBack: Bool) {
         backButton.isEnabled = canGoBack
     }
@@ -638,7 +675,7 @@ extension URLBarView: TabToolbarProtocol {
                 return [locationTextField, cancelButton]
             } else {
                 if toolbarIsShowing {
-                    return [backButton, forwardButton, stopReloadButton, locationView, tabsButton, menuButton, progressBar]
+                    return [backButton, forwardButton, stopReloadButton, locationView, tabsButton, self.searchButton, menuButton, progressBar]
                 } else {
                     return [locationView, progressBar]
                 }
@@ -691,10 +728,10 @@ extension URLBarView: TabLocationViewDelegate {
 }
 
 extension URLBarView: AutocompleteTextFieldDelegate {
-    func autocompleteTextFieldShouldReturn(_ autocompleteTextField: AutocompleteTextField) -> Bool {
+    func autocompleteTextFieldShouldReturn(_ autocompleteTextField: AutocompleteTextField, completion: String?) -> Bool {
         guard let text = locationTextField?.text else { return true }
         if !text.trimmingCharacters(in: .whitespaces).isEmpty {
-            delegate?.urlBar(self, didSubmitText: text)
+            delegate?.urlBar(self, didSubmitText: text, completion: completion)
             return true
         } else {
             return false
@@ -716,9 +753,14 @@ extension URLBarView: AutocompleteTextFieldDelegate {
 
     func autocompletePasteAndGo(_ autocompleteTextField: AutocompleteTextField) {
         if let pasteboardContents = UIPasteboard.general.string {
-            self.delegate?.urlBar(self, didSubmitText: pasteboardContents)
+            self.delegate?.urlBar(self, didSubmitText: pasteboardContents, completion: nil)
         }
     }
+
+    func autocompleteDidEndEditing(_ autocompleteTextField: AutocompleteTextField) {
+        self.locationView.animateToResignFirstResponder()
+    }
+
 }
 
 extension URLBarView: Themeable {
@@ -729,20 +771,21 @@ extension URLBarView: Themeable {
         actionButtons.forEach { $0.applyTheme() }
         tabsButton.applyTheme()
         backgroundColor = .clear
-        line.backgroundColor = UIColor.theme.browser.urlBarDivider
+        line.backgroundColor = Theme.browser.urlBarDivider
 
-        locationBorderColor = UIColor.theme.urlbar.border
+        locationBorderColor = Theme.urlbar.border
 
         if inOverlayMode {
-            locationView.backgroundColor = UIColor.theme.textField.backgroundInOverlay
+            locationView.backgroundColor = Theme.textField.backgroundInOverlay
         } else {
-            locationView.backgroundColor = UIColor.theme.urlbar.background
+            locationView.backgroundColor = Theme.urlbar.background
         }
 
         locationContainer.backgroundColor = .clear
 
-        privateModeBadge.badge.tintBackground(color: UIColor.theme.browser.background)
-        cancelButton.setTitleColor(UIColor.theme.general.controlTint, for: .normal)
+        privateModeBadge.badge.tintBackground(color: Theme.browser.background)
+        self.whatsNeweBadge.badge.tintBackground(color: .clear)
+        cancelButton.setTitleColor(Theme.general.controlTint, for: .normal)
     }
 }
 
@@ -752,9 +795,9 @@ extension URLBarView: PrivateModeUI {
             privateModeBadge.show(isPrivate)
         }
 
-        locationActiveBorderColor = UIColor.theme.urlbar.activeBorder(isPrivate)
-        progressBar.setGradientColors(startColor: UIColor.theme.loadingBar.start(isPrivate),
-                                      endColor: UIColor.theme.loadingBar.end(isPrivate))
+        locationActiveBorderColor = Theme.urlbar.activeBorder(isPrivate)
+        progressBar.setGradientColors(startColor: Theme.loadingBar.start(isPrivate),
+                                      endColor: Theme.loadingBar.end(isPrivate))
         ToolbarTextField.applyUIMode(isPrivate: isPrivate)
 
         applyTheme()
@@ -790,15 +833,19 @@ class ToolbarTextField: AutocompleteTextField {
     required init?(coder aDecoder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
+
+    override func clearButtonRect(forBounds bounds: CGRect) -> CGRect {
+        return CGRect(x: bounds.width - bounds.height / 2, y: 0, width: bounds.height / 2, height: bounds.height)
+    }
 }
 
 extension ToolbarTextField: Themeable {
     func applyTheme() {
-        textColor = UIColor.theme.textField.textAndTint
+        textColor = Theme.textField.textAndTint
     }
 
     // ToolbarTextField is created on-demand, so the textSelectionColor is a static prop for use when created
     static func applyUIMode(isPrivate: Bool) {
-       textSelectionColor = UIColor.theme.urlbar.textSelectionHighlight(isPrivate)
+       textSelectionColor = Theme.urlbar.textSelectionHighlight(isPrivate)
     }
 }

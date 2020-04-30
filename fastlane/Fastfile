@@ -16,12 +16,24 @@ APPS = {
     share_to_provisioning_profile: "2bbfa6d3-0e13-4a69-ab75-07fb76dc8a49",
     share_to_provisioning_profile_name: "match AppStore com.cliqz.ShareTo",
 
+    open_in_identifier: "com.cliqz.OpenIn",
+    open_in_provisioning_profile: "1f8b6a38-cbd6-4cf4-a1bb-df83f419e6c6",
+    open_in_provisioning_profile_name: "match AppStore com.cliqz.OpenIn",
+
+    today_identifier: "com.cliqz.Today",
+    today_provisioning_profile: "f3d5ad52-4a14-40df-bdb3-eecdc8d5a905",
+    today_provisioning_profile_name: "match AppStore com.cliqz.Today",
+
+    siri_identifier: "com.cliqz.Siri",
+    siri_provisioning_profile: "2d9ab6fa-81bf-486a-b8f3-77583a3bc2ba",
+    siri_provisioning_profile_name: "match AppStore com.cliqz.Siri",
+
     sentry_slug: "cliqz-ios",
     match_branch: "browser-ios",
   },
   "CliqzNightly" => {
     target: "Cliqz",
-    scheme: "Cliqz Nightly",
+    scheme: "Cliqz",
     configuration: "Adhoc",
 
     app_group_identifier: "group.com.cliqz.browser.nightly",
@@ -34,6 +46,18 @@ APPS = {
     share_to_provisioning_profile: "93a334ed-4bb7-4121-b7d1-326fe0546dec",
     share_to_provisioning_profile_name: "match AppStore com.cliqz.browser.nightly.ShareTo",
 
+    open_in_identifier: "com.cliqz.browser.nightly.OpenIn",
+    open_in_provisioning_profile: "3f191f93-a559-43d8-a1ab-666dd0306362",
+    open_in_provisioning_profile_name: "match AppStore com.cliqz.browser.nightly.OpenIn",
+
+    today_identifier: "com.cliqz.browser.nightly.Today",
+    today_provisioning_profile: "46a08be3-c465-4747-86b2-324fd73ab5cc",
+    today_provisioning_profile_name: "match AppStore com.cliqz.browser.nightly.Today",
+
+    siri_identifier: "com.cliqz.browser.nightly.Siri",
+    siri_provisioning_profile: "d93abd59-ddbd-4334-b19a-c2c7a7612dc9",
+    siri_provisioning_profile_name: "match AppStore com.cliqz.browser.nightly.Siri",
+
     sentry_slug: "cliqznighly-ios",
     match_branch: "cliqz-browser-nightly",
   }
@@ -45,7 +69,14 @@ def get_app(options)
   OpenStruct.new(app)
 end
 
+def get_version(app)
+  configuration_file = "../Branding/#{app.target}/Configuration/#{app.target}#{app.configuration}.xcconfig"
+  configuration = Xcodeproj::Config.new(configuration_file)
+  configuration.attributes['APP_MARKETING_VERSION']
+end
+
 platform :ios do
+
   lane :lint do
     swiftlint(
       executable: "Pods/SwiftLint/swiftlint",
@@ -69,15 +100,18 @@ platform :ios do
       keychain_name: ENV["MATCH_KEYCHAIN_NAME"],
       keychain_password: ENV["MATCH_PASSWORD"],
       git_branch: app.match_branch,
-      app_identifier: [app.app_identifier, app.share_to_identifier],
+      app_identifier: [
+        app.app_identifier,
+        app.share_to_identifier,
+        app.open_in_identifier,
+        app.today_identifier,
+        app.siri_identifier,
+      ],
       readonly: true,
       verbose: true
     )
 
-    version = get_version_number(
-      xcodeproj: "UserAgent.xcodeproj",
-      target: app.target,
-    )
+    version = get_version(app)
 
     previous_version = 0
 
@@ -106,28 +140,6 @@ platform :ios do
       end
     )
 
-    update_app_identifier(
-      xcodeproj: "UserAgent.xcodeproj", # Optional path to xcodeproj, will use the first .xcodeproj if not set
-      plist_path: "./Branding/#{app.target}/Info.plist",
-      app_identifier: app.app_identifier
-    )
-
-    update_app_identifier(
-      xcodeproj: "UserAgent.xcodeproj", # Optional path to xcodeproj, will use the first .xcodeproj if not set
-      plist_path: "./Extensions/ShareTo/#{app.target}-Info.plist",
-      app_identifier: app.share_to_identifier
-    )
-
-    update_app_group_identifiers(
-      entitlements_file: "Client/Entitlements/#{app.target}.entitlements",
-      app_group_identifiers: [app.app_group_identifier]
-    )
-
-    update_app_group_identifiers(
-      entitlements_file: "Extensions/Entitlements/#{app.target}ShareTo.entitlements",
-      app_group_identifiers: [app.app_group_identifier]
-    )
-
     disable_automatic_code_signing(
       path: "UserAgent.xcodeproj",
       code_sign_identity: "iPhone Distribution: Cliqz GmbH (2UYYSSHVUH)",
@@ -147,11 +159,33 @@ platform :ios do
       build_configuration: app.configuration,
     )
 
+    update_project_provisioning(
+      xcodeproj: "UserAgent.xcodeproj",
+      profile: "/Users/vagrant/Library/MobileDevice/Provisioning Profiles/#{app.open_in_provisioning_profile}.mobileprovision",
+      target_filter: "OpenIn",
+      build_configuration: app.configuration,
+    )
+
+    update_project_provisioning(
+      xcodeproj: "UserAgent.xcodeproj",
+      profile: "/Users/vagrant/Library/MobileDevice/Provisioning Profiles/#{app.today_provisioning_profile}.mobileprovision",
+      target_filter: "Today",
+      build_configuration: app.configuration,
+    )
+
+    update_project_provisioning(
+      xcodeproj: "UserAgent.xcodeproj",
+      profile: "/Users/vagrant/Library/MobileDevice/Provisioning Profiles/#{app.siri_provisioning_profile}.mobileprovision",
+      target_filter: "Siri",
+      build_configuration: app.configuration,
+    )
+
     build_app(
       workspace: "UserAgent.xcworkspace",
       clean: true,
       disable_xcpretty: true,
       scheme: app.scheme,
+      configuration: app.configuration,
       skip_profile_detection: true,
       codesigning_identity: "iPhone Distribution: Cliqz GmbH (2UYYSSHVUH)",
       export_method: "app-store",
@@ -161,6 +195,9 @@ platform :ios do
         provisioningProfiles: {
           app.app_identifier => app.provisioning_profile_name,
           app.share_to_identifier => app.share_to_provisioning_profile_name,
+          app.open_in_identifier => app.open_in_provisioning_profile_name,
+          app.today_identifier => app.today_provisioning_profile_name,
+          app.siri_identifier => app.siri_provisioning_profile_name,
         }
       }
     )
@@ -168,6 +205,7 @@ platform :ios do
 
   lane :Upload do |options|
     app = get_app(options)
+    version = get_version(app)
 
     changelog = read_changelog
 
@@ -176,10 +214,10 @@ platform :ios do
       demo_account_required: "false",
       skip_waiting_for_build_processing: "false",
       app_identifier: app.app_identifier,
-      groups: ['Internal'],
     )
 
-    download_dsyms(app_identifier: app.app_identifier)
+    download_dsyms(version: version, app_identifier: app.app_identifier)
+
     sentry_upload_dsym(
       auth_token: ENV["SENTRY_AUTH_TOKEN"],
       org_slug: 'cliqz',

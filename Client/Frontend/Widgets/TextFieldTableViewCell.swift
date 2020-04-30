@@ -8,7 +8,7 @@ struct TextFieldTableViewCellUX {
     static let HorizontalMargin: CGFloat = 16
     static let VerticalMargin: CGFloat = 10
     static let TitleLabelFont = UIFont.systemFont(ofSize: 12)
-    static let TitleLabelTextColor = UIConstants.SystemBlueColor
+    static let TitleLabelTextColor = Theme.tableView.headerTextLight
     static let TextFieldFont = UIFont.systemFont(ofSize: 16)
 }
 
@@ -69,9 +69,9 @@ class TextFieldTableViewCell: UITableViewCell, Themeable {
     }
 
     func applyTheme() {
-        backgroundColor = UIColor.theme.tableView.rowBackground
+        backgroundColor = Theme.tableView.rowBackground
         titleLabel.textColor = TextFieldTableViewCellUX.TitleLabelTextColor
-        textField.textColor = UIColor.theme.tableView.rowText
+        textField.textColor = Theme.tableView.rowText
     }
 }
 
