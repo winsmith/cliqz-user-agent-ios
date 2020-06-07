@@ -1,14 +1,13 @@
 
-/* Label for search engine buttons. The argument corresponds to the name of the search engine. */
-"%@ search" = "%@ search";
+"Search.UI.Visit" = "Visit";
 
-/* Label for search settings button. */
-"Search Settings" = "Search Settings";
+"Search.UI.NoResults" = "No results found";
 
-/* Accessibility label for image of default search engine displayed left to the actual search suggestions from the engine. The parameter substituted for \"%@\" is the name of the search engine. E.g.: Search suggestions from Google */
-"Search suggestions from %@" = "Search suggestions from %@";
+"Search.UI.Footer" = "More search results";
 
-"Search.Visit" = "Visit";
+"Search.UI.AdditionalSearchEnginesHeader" = "Additional Search Engines";
+
+"Search.UI.SwitchToTab" = "SWITCH TO TAB";
 
 /* The message that asks the user to Add the search provider explaining where the search engine will appear */
 "Search.ThirdPartyEngines.AddMessage" = "Die neue Suchmaschine erscheint in der Schnellsuchleiste.";
@@ -18,9 +17,6 @@
 
 /* The title that asks the user to Add the search provider */
 "Search.ThirdPartyEngines.AddTitle" = "Suchmaschine hinzufügen?";
-
-/* The cancel button if you do not want to add a search engine. */
-"Search.ThirdPartyEngines.Cancel" = "Abbrechen";
 
 /* A message explaining fault in custom search engine form. */
 "Search.ThirdPartyEngines.DuplicateErrorMessage" = "Eine Suchmaschine mit diesem Titel oder dieser URL wurde bereits hinzugefügt.";
@@ -39,6 +35,3 @@
 
 /* A title stating that we failed to add custom search engine. */
 "Search.ThirdPartyEngines.FormErrorTitle" = "Fehlgeschlagen";
-
-/* The confirmation button */
-"Search.ThirdPartyEngines.OK" = "OK";

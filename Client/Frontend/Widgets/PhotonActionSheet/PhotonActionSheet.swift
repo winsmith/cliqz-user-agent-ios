@@ -29,7 +29,7 @@ class PhotonActionSheet: UIViewController, UITableViewDelegate, UITableViewDataS
 
     lazy var closeButton: UIButton = {
         let button = UIButton()
-        button.setTitle(Strings.PhotonMenu.Close, for: .normal)
+        button.setTitle(Strings.General.CloseString, for: .normal)
         button.setTitleColor(Theme.actionMenu.closeButtonTitleColor, for: .normal)
         button.layer.cornerRadius = PhotonActionSheetUX.CornerRadius
         button.titleLabel?.font = DynamicFontHelper.defaultHelper.DeviceFontExtraLargeBold
@@ -44,7 +44,7 @@ class PhotonActionSheet: UIViewController, UITableViewDelegate, UITableViewDataS
         }
     }
 
-    init(site: Site, actions: [PhotonActionSheetItem], closeButtonTitle: String = Strings.PhotonMenu.Close) {
+    init(site: Site, actions: [PhotonActionSheetItem], closeButtonTitle: String = Strings.General.CloseString) {
         self.site = site
         self.actions = [actions]
         self.style = .centered
@@ -52,7 +52,7 @@ class PhotonActionSheet: UIViewController, UITableViewDelegate, UITableViewDataS
         self.closeButton.setTitle(closeButtonTitle, for: .normal)
     }
 
-    init(title: String? = nil, actions: [[PhotonActionSheetItem]], closeButtonTitle: String = Strings.PhotonMenu.Close, style presentationStyle: UIModalPresentationStyle? = nil) {
+    init(title: String? = nil, actions: [[PhotonActionSheetItem]], closeButtonTitle: String = Strings.General.CloseString, style presentationStyle: UIModalPresentationStyle? = nil) {
         self.actions = actions
         if let presentationStyle = presentationStyle {
             self.style = presentationStyle == .popover ? .popover : .bottom
@@ -105,7 +105,7 @@ class PhotonActionSheet: UIViewController, UITableViewDelegate, UITableViewDataS
         if style == .popover {
             tableView.snp.makeConstraints { make in
                 make.top.bottom.equalTo(self.view)
-                make.width.equalTo(350)
+                make.width.equalTo(400)
             }
         } else {
             tableView.snp.makeConstraints { make in
@@ -258,8 +258,7 @@ class PhotonActionSheet: UIViewController, UITableViewDelegate, UITableViewDataS
 
         // Switches can be toggled on/off without dismissing the menu
         if action.accessory == .Switch {
-            let generator = UIImpactFeedbackGenerator(style: .medium)
-            generator.impactOccurred()
+            HapticFeedback.vibrate(style: .medium)
             action.isEnabled.toggle()
             actions[indexPath.section][indexPath.row] = action
             self.tableView.deselectRow(at: indexPath, animated: true)

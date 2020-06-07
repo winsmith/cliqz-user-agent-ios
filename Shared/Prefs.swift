@@ -10,8 +10,6 @@ public struct PrefsKeys {
     public static let IntroSeen = "IntroViewControllerSeen-3.0.0"
     public static let ShowAppReview = "ShowAppReview-\(AppInfo.appVersion)"
 
-    public static let PrivacyDashboardEnabledKey = "prefkey.privacy.dashboard"
-
     public static let WhatsNewBubble = "WhatsNewBubble-\(AppInfo.appVersion)"
     public static let NewTabPageDefaultView = "NewTabPageDefaultView"
     public static let OnBrowserStartTab = "OnBrowserStartTab"
@@ -26,9 +24,16 @@ public struct PrefsKeys {
     public static let WipeAllTraces = "WipeAllTraces"
     public static let AutomaticForgetMode = "AutomaticForgetMode"
 
+    // Privacy Dashboard
+    public static let AntiTracking = "AntiTracking"
+    public static let Adblocker = "Adblocker"
+    public static let PopupBlocker = "PopupBlocker"
+
     //News
     public static let NewTabNewsEnabled = "NewTabNewsEnabled"
     public static let NewTabNewsImagesEnabled = "NewTabNewsImagesEnabled"
+
+    public static let ContextMenuShowLinkPreviews = "showLinkPreviews"
 
     public static let NewTabCustomUrlPrefKey = "HomePageURLPref"
     //Activity Stream

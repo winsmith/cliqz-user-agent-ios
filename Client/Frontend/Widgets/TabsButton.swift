@@ -38,7 +38,7 @@ class TabsButton: UIButton {
     override var isHighlighted: Bool {
         didSet {
             if isHighlighted {
-                borderView.color = .CliqzBlue
+                borderView.color = .Blue
             } else {
                 borderView.color = textColor
             }
@@ -207,7 +207,7 @@ class TabsButton: UIButton {
                 self.insideButton.layer.opacity = 1
                 self.insideButton.layer.transform = CATransform3DIdentity
             }
-            self.accessibilityLabel = NSLocalizedString("Show Tabs", comment: "Accessibility label for the tabs button in the (top) tab toolbar")
+            self.accessibilityLabel = Strings.Accessibility.TabTray.ShowTabs
             self.countLabel.text = self.countToBe
             self.accessibilityValue = self.countToBe
             self.isUpdatingTabCount = false

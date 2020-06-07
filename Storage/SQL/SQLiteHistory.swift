@@ -32,6 +32,10 @@ public func isIgnoredURL(_ url: URL) -> Bool {
         return true
     }
 
+    if let searchUrl = SearchURL(url), !searchUrl.isRedirected {
+        return true
+    }
+
     return false
 }
 
@@ -132,20 +136,22 @@ extension SDRow {
  */
 open class SQLiteHistory {
     let db: BrowserDB
+    let favicons: SQLiteFavicons
     let prefs: Prefs
     let clearTopSitesQuery: (String, Args?) = ("DELETE FROM cached_top_sites", nil)
 
     required public init(db: BrowserDB, prefs: Prefs) {
         self.db = db
+        self.favicons = SQLiteFavicons(db: self.db)
         self.prefs = prefs
     }
 
     public func getSites(forURLs urls: [String]) -> Deferred<Maybe<Cursor<Site?>>> {
         let inExpression = urls.joined(separator: "\",\"")
         let sql = """
-        SELECT history.id AS historyID, history.url AS url, title, guid
-        FROM history
-        WHERE history.url IN (\"\(inExpression)\")
+        SELECT history.id AS historyID, history.url AS url, title, guid, iconID, iconURL, iconDate, iconType, iconWidth
+        FROM view_favicons_widest, history
+        WHERE history.id = siteID AND history.url IN (\"\(inExpression)\")
         """
 
         let args: Args = []
@@ -454,6 +460,8 @@ extension SQLiteHistory: BrowserHistory {
         return db.run([
             (sql: deleteVisits, args: visitArgs),
             (sql: markDeleted, args: markArgs),
+            favicons.getCleanupFaviconsQuery(),
+            favicons.getCleanupFaviconSiteURLsQuery()
         ])
     }
 
@@ -465,7 +473,10 @@ extension SQLiteHistory: BrowserHistory {
         return db.run([
             (sql: deleteVisits, args: args),
             (sql: deleteHistory, args: args),
-            (sql: deleteDomains, args: args)])
+            (sql: deleteDomains, args: args),
+            favicons.getCleanupFaviconsQuery(),
+            favicons.getCleanupFaviconSiteURLsQuery()
+        ])
     }
 
     public func removeHistoryFromDate(_ date: Date) -> Success {
@@ -484,6 +495,8 @@ extension SQLiteHistory: BrowserHistory {
         return db.run([
             (sql: historyRemoval, args: historyRemovalArgs),
             (sql: visitRemoval, args: visitRemovalArgs),
+            favicons.getCleanupFaviconsQuery(),
+            favicons.getCleanupFaviconSiteURLsQuery()
         ])
     }
 
@@ -503,10 +516,54 @@ extension SQLiteHistory: BrowserHistory {
             >>> effect({ self.db.vacuum() })
     }
 
-    public func clearSearchHistory() -> Success {
-        return db.run("DELETE FROM history WHERE url LIKE \"search://%\"")
+    public func clearQueryLog() -> Success {
+        return self.removeQueries()
     }
 
+    public func removeQuery(_ query: String) -> Success {
+        return self.removeQueries(query: query)
+    }
+
+    private func removeQueries(query: String? = nil) -> Success {
+        var likeStatement = "search://%"
+
+        if query != nil {
+            let queryURLQueryItem = URLQueryItem(name: SearchURL.queryItemNameQuery,
+                                                 value: query)
+            let queryEncoded = queryURLQueryItem.value ?? ""
+            likeStatement = "search://%query=\(queryEncoded)&redirected"
+        }
+
+        return db.run([
+            (sql: "DELETE FROM visits WHERE siteID = (SELECT id FROM history WHERE url LIKE ?)", args: [likeStatement]),
+            (sql: "DELETE FROM history WHERE url LIKE ?", args: [likeStatement]),
+        ])
+    }
+
+    public func getRecentQueries() -> Deferred<Maybe<Cursor<String>>> {
+        let sql = """
+            SELECT history.url
+            FROM (
+                SELECT siteID
+                FROM visits
+                ORDER BY visits.date DESC
+                LIMIT 100
+            ) as visits
+            INNER JOIN history ON visits.siteID = history.id
+            WHERE url like "search://%"
+        """
+
+        let factory: (SDRow) -> String = {
+            guard
+                let urlString = $0["url"] as? String,
+                let url = URL(string: urlString),
+                let searchURL = SearchURL(url)
+            else { return "" }
+            return searchURL.query
+        }
+
+        return db.runQueryConcurrently(sql, args: [], factory: factory)
+    }
 
     func recordVisitedSite(_ site: Site) -> Success {
         // Don't store visits to sites with about: protocols
@@ -625,16 +682,21 @@ extension SQLiteHistory: BrowserHistory {
     }
 
     public func getDomainProtocol(_ domainName: String) -> Deferred<Maybe<String>> {
-
         let sql = """
             SELECT
-                DISTINCT(substr(history.url, 0, instr(history.url, ":"))) as protocol,
+                DISTINCT(substr(url, 0, instr(url, ":"))) as protocol,
                 COUNT(*) as count
-            FROM history
-            INNER JOIN domains ON domains.id = history.domain_id
-            WHERE domains.domain = ?
-                AND history.is_deleted = 0
-                AND history.url NOT LIKE 'search://%'
+            FROM (
+                SELECT history.url as url
+                FROM visits
+                INNER JOIN history ON visits.siteID = history.id
+                INNER JOIN domains ON domains.id = history.domain_id
+                WHERE domains.domain = ?
+                    AND history.is_deleted = 0
+                    AND history.url NOT LIKE 'search%'
+                ORDER BY visits.date DESC
+                LIMIT 100
+            )
             GROUP BY protocol
             ORDER BY count DESC
         """

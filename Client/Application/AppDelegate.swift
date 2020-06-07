@@ -38,6 +38,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UIViewControllerRestorati
     var humanWebFeature: HumanWebFeature!
     var insightsFeature: InsightsFeature!
     var useCases: UseCases!
+    var afterStartupAction: (() -> Void)?
 
     weak var application: UIApplication?
     var launchOptions: [AnyHashable: Any]?
@@ -86,7 +87,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UIViewControllerRestorati
 
         // Need to get "settings.sendUsageData" this way so that Sentry can be initialized
         // before getting the Profile.
-        let sendUsageData = NSUserDefaultsPrefs(prefix: "profile").boolForKey(AppConstants.PrefSendUsageData) ?? true
+        let sendUsageData = Features.Telemetry.isEnabled && NSUserDefaultsPrefs(prefix: "profile").boolForKey(AppConstants.PrefSendUsageData) ?? true
         Sentry.shared.setup(sendUsageData: sendUsageData)
 
         // Set the Firefox UA for browsing.
@@ -187,7 +188,6 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UIViewControllerRestorati
     private func setupFlipper(_ application: UIApplication) {
         let client = FlipperClient.shared()
         let layoutDescriptorMapper = SKDescriptorMapper(defaults: ())
-        FlipperKitLayoutComponentKitSupport.setUpWith(layoutDescriptorMapper)
         client?.add(FlipperKitLayoutPlugin(rootNode: application, with: layoutDescriptorMapper!))
         client?.add(FlipperKitNetworkPlugin(networkAdapter: SKIOSNetworkAdapter()))
         client?.add(FKUserDefaultsPlugin(suiteName: AppInfo.sharedContainerIdentifier))
@@ -308,6 +308,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UIViewControllerRestorati
         DispatchQueue.main.asyncAfter(deadline: .now() + 5.0) {
             self.profile?.cleanupHistoryIfNeeded()
         }
+
+        if let callback = self.afterStartupAction {
+            callback()
+            self.afterStartupAction = nil
+        }
     }
 
     func applicationDidEnterBackground(_ application: UIApplication) {
@@ -407,6 +412,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UIViewControllerRestorati
         SDWebImageDownloader.shared.setValue(firefoxUA, forHTTPHeaderField: "User-Agent")
         //SDWebImage is setting accept headers that report we support webp. We don't
         SDWebImageDownloader.shared.setValue("image/*;q=0.8", forHTTPHeaderField: "Accept")
+
+        FaviconFetcher.userAgent = UserAgent.desktopUserAgent()
     }
 
     private func shouldAskForReview() -> Bool {
@@ -441,14 +448,18 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UIViewControllerRestorati
 
     func application(_ application: UIApplication, continue userActivity: NSUserActivity, restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void) -> Bool {
         let bvc = BrowserViewController.foregroundBVC()
-        if #available(iOS 12.0, *), let activityType = SiriActivityTypes(rawValue: userActivity.activityType) {
+        if #available(iOS 12.0, *), let activityType = SiriActivityTypes(value: userActivity.activityType) {
             switch activityType {
             case .openURL:
-                bvc.openBlankNewTab(focusLocationField: false)
+                self.afterStartupAction = {
+                    bvc.openBlankNewTab(focusLocationField: false)
+                }
                 return true
             case .searchWith:
-                let query = userActivity.userInfo?["query"] as? String
-                bvc.showSearchInNewTab(query: query)
+                self.afterStartupAction = {
+                    let query = userActivity.userInfo?["query"] as? String
+                    self.browserViewController.showSearchInNewTab(query: query)
+                }
                 return true
             }
         }
@@ -461,11 +472,14 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UIViewControllerRestorati
             // it is recommended that links contain the `deep_link` query parameter. This link will also
             // be url encoded.
             if let deepLink = query["deep_link"]?.removingPercentEncoding, let url = URL(string: deepLink) {
-                bvc.switchToTabForURLOrOpen(url, isPrivileged: true)
+                self.afterStartupAction = {
+                    bvc.switchToTabForURLOrOpen(url, isPrivileged: true)
+                }
                 return true
             }
-
-            bvc.switchToTabForURLOrOpen(url, isPrivileged: true)
+            self.afterStartupAction = {
+                bvc.switchToTabForURLOrOpen(url, isPrivileged: true)
+            }
             return true
         }
 
@@ -475,7 +489,9 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UIViewControllerRestorati
             if let userInfo = userActivity.userInfo,
                 let urlString = userInfo[CSSearchableItemActivityIdentifier] as? String,
                 let url = URL(string: urlString) {
-                bvc.switchToTabForURLOrOpen(url, isPrivileged: true)
+                self.afterStartupAction = {
+                    bvc.switchToTabForURLOrOpen(url, isPrivileged: true)
+                }
                 return true
             }
         }
@@ -499,9 +515,11 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UIViewControllerRestorati
     }
 
     func application(_ application: UIApplication, performActionFor shortcutItem: UIApplicationShortcutItem, completionHandler: @escaping (Bool) -> Void) {
-        let handledShortCutItem = QuickActions.sharedInstance.handleShortCutItem(shortcutItem, withBrowserViewController: BrowserViewController.foregroundBVC())
-
-        completionHandler(handledShortCutItem)
+        let handledShortCutItem = QuickActions.sharedInstance.canHandleShortCutItem(shortcutItem)
+        self.afterStartupAction = {
+            QuickActions.sharedInstance.handleShortCutItem(shortcutItem, withBrowserViewController: BrowserViewController.foregroundBVC())
+            completionHandler(handledShortCutItem)
+        }
     }
 }
 

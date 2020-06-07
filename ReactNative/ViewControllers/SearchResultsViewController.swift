@@ -8,6 +8,7 @@
 
 import Foundation
 import React
+import Shared
 
 /// Displays Cliqz Search Results
 ///
@@ -45,7 +46,9 @@ class SearchResultsViewController: UIViewController {
         RCTRootView(
             bridge: ReactNativeBridge.sharedInstance.bridge,
             moduleName: "SearchResults",
-            initialProperties: [:]
+            initialProperties: [
+                "Features": Features.toDict(),
+            ]
         )
     }()
 
@@ -92,9 +95,10 @@ extension SearchResultsViewController: BrowserCoreClient {
     func reportSelection(query: String, url: URL, completion: String?, isForgetMode: Bool) {
         let complentionLength = completion?.count ?? 0
         let isAutocompleted = complentionLength > 0
-        let completionRange = query.startIndex..<query.index(query.startIndex, offsetBy: query.count - complentionLength)
-        let queryWithoutCompletion = query[completionRange]
-
+        var queryWithoutCompletion = query
+        if isAutocompleted, let range = query.range(of: completion!, options: .backwards) {
+             queryWithoutCompletion = query.replacingCharacters(in: range, with: "")
+        }
         browserCore.callAction(module: "search", action: "reportSelection", args: [
             [
                 "action": "enter",

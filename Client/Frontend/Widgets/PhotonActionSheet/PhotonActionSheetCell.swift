@@ -16,7 +16,7 @@ private struct PhotonActionSheetCellUX {
     static let TitleLabelOffset = 10
     static let CellTopBottomOffset = 12
     static let StatusIconSize = 24
-    static let SelectedOverlayColor = UIColor(white: 0.0, alpha: 0.25)
+    static let SelectedOverlayColor = UIColor.black.withAlphaComponent(0.25)
     static let CornerRadius: CGFloat = 3
 }
 
@@ -182,7 +182,9 @@ class PhotonActionSheetCell: UITableViewCell {
         titleLabel.text = action.title
         titleLabel.textColor = self.tintColor
         titleLabel.textColor = action.accessory == .Text ? titleLabel.textColor.withAlphaComponent(0.6) : titleLabel.textColor
-        titleLabel.adjustsFontSizeToFitWidth = true
+        titleLabel.adjustsFontSizeToFitWidth = false
+        titleLabel.numberOfLines = 1
+        titleLabel.lineBreakMode = .byTruncatingTail
         titleLabel.minimumScaleFactor = 0.5
 
         subtitleLabel.text = action.text

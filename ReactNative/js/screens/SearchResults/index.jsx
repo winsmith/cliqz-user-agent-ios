@@ -48,7 +48,7 @@ export default class SearchResults extends React.Component {
 
   render() {
     const { query, results } = this.state;
-    const { searchModule, insightsModule } = this.props;
+    const { searchModule, insightsModule, Features } = this.props;
 
     return (
       <Results
@@ -56,6 +56,7 @@ export default class SearchResults extends React.Component {
         query={query}
         searchModule={searchModule}
         insightsModule={insightsModule}
+        Features={Features}
       />
     );
   }

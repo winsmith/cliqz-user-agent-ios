@@ -1,7 +1,12 @@
+/*
+  UserAgent.strings
+  UserAgent
+
+  Created by Krzysztof Modras on 30.09.19.
+  Copyright © 2019 Cliqz. All rights reserved.
+*/
 
 "HomeView.SegmentedControl.Bookmarks.Title" = "Bookmarks";
-
-"HomeView.SegmentedControl.Downloads.Title" = "Downloads";
 
 "HomeView.SegmentedControl.History.Title" = "History";
 
@@ -14,13 +19,6 @@
 
 "Interceptor.AntiPhishing.UI.Message" = "%1$@ has blocked access to %2$@ because it has been reported as a phishing website. Phishing websites disguise as other sites you may trust in order to trick you into disclosing your login, password or other sensitive information";
 
-/* 
-  UserAgent.strings
-  UserAgent
-
-  Created by Krzysztof Modras on 30.09.19.
-  Copyright © 2019 Cliqz. All rights reserved.
-*/
 "Interceptor.AntiPhishing.UI.Title" = "Warning: deceptive website!";
 
 "PrivacyDashboard.Legend.NoTrackersSeen" = "This domain does not contain any trackers, which is great!";

@@ -10,27 +10,31 @@ extension TabContentBlocker {
     }
 
     func userContentController(_ userContentController: WKUserContentController, didReceiveScriptMessage message: WKScriptMessage) {
-        guard (self.isPrivacyDashboardEnabled),
-            let body = message.body as? [String: String],
-            let urlString = body["url"],
+        guard (self.isAntiTrackingEnabled || self.isAdBlockingEnabled),
+            let body = message.body as? [String: Any],
+            let urls = body["urls"] as? [String],
             let mainDocumentUrl = tab?.currentURL() else {
             return
         }
 
         // Reset the pageStats to make sure the trackingprotection shield icon knows that a page was allowListed
-        let isAdsAllowListed = !self.isPrivacyDashboardEnabled || ContentBlocker.shared.isAdsAllowListed(url: mainDocumentUrl)
-        let isTrackingAllowListed = !self.isPrivacyDashboardEnabled || ContentBlocker.shared.isTrackingAllowListed(url: mainDocumentUrl)
+        let isAdsAllowListed = !self.isAntiTrackingEnabled || ContentBlocker.shared.isAdsAllowListed(url: mainDocumentUrl)
+        let isTrackingAllowListed = !self.isAdBlockingEnabled || ContentBlocker.shared.isTrackingAllowListed(url: mainDocumentUrl)
         guard !isAdsAllowListed || !isTrackingAllowListed else {
             clearPageStats()
             return
         }
-        guard var components = URLComponents(string: urlString) else { return }
-        components.scheme = "http"
-        guard let url = components.url else { return }
 
-        TPStatsBlocklistChecker.shared.isBlocked(url: url).uponQueue(.main) { tracker in
-            guard let tracker = tracker else { return }
-            self.stats.update(byAddingTracker: tracker)
+        // The JS sends the urls in batches for better performance. Iterate the batch and check the urls.
+        for urlString in urls {
+            guard var components = URLComponents(string: urlString) else { return }
+            components.scheme = "http"
+            guard let url = components.url else { return }
+
+            TPStatsBlocklistChecker.shared.isBlocked(url: url).uponQueue(.main) { tracker in
+                guard let tracker = tracker else { return }
+                self.stats.update(byAddingTracker: tracker)
+            }
         }
     }
 }

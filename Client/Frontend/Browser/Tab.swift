@@ -251,7 +251,7 @@ class Tab: NSObject {
             let webView = TabWebView(frame: .zero, configuration: configuration)
             webView.delegate = self
 
-            webView.accessibilityLabel = NSLocalizedString("Web content", comment: "Accessibility label for the main web content view")
+            webView.accessibilityLabel = Strings.Accessibility.WebContent
             webView.allowsBackForwardNavigationGestures = true
 
             if #available(iOS 13, *) {
@@ -260,8 +260,7 @@ class Tab: NSObject {
                 webView.allowsLinkPreview = false
             }
 
-            // Night mode enables this by toggling WKWebView.isOpaque, otherwise this has no effect.
-            webView.backgroundColor = .black
+            webView.backgroundColor = Theme.browser.background
 
             // Turning off masking allows the web content to flow outside of the scrollView's frame
             // which allows the content appear beneath the toolbars in the BrowserViewController
@@ -467,7 +466,7 @@ class Tab: NSObject {
     func reload() {
         // If the current page is an error page, and the reload button is tapped, load the original URL
         if let url = webView?.url, let internalUrl = InternalURL(url), let page = internalUrl.originalURLFromErrorPage {
-            webView?.evaluateJavaScript("location.replace('\(page)')", completionHandler: nil)
+            webView?.replaceLocation(with: page)
             return
         }
 

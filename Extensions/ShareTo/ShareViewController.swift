@@ -113,7 +113,7 @@ class ShareViewController: UIViewController {
 
         if shareItem?.isUrlType() ?? true {
             makeActionRow(addTo: stackView, label: Strings.ShareExtension.OpenIn, imageName: "Icon-Small", action: #selector(actionOpenInUserAgentNow), hasNavigation: false)
-            makeActionRow(addTo: stackView, label: Strings.ShareExtension.OpenInPrivateTab, imageName: "forgetMode", action: #selector(actionOpenInPrivateTabInUserAgentNow), hasNavigation: false)
+            makeActionRow(addTo: stackView, label: Strings.ForgetMode.ShareExtension.OpenInPrivateTab, imageName: "forgetMode", action: #selector(actionOpenInPrivateTabInUserAgentNow), hasNavigation: false)
             makeActionRow(addTo: stackView, label: Strings.ShareExtension.LoadInBackground, imageName: "menu-Show-Tabs", action: #selector(actionLoadInBackground), hasNavigation: false)
             makeActionRow(addTo: stackView, label: Strings.ShareExtension.BookmarkThisPage, imageName: "AddToBookmarks", action: #selector(actionBookmarkThisPage), hasNavigation: false)
         } else {
@@ -290,7 +290,7 @@ class ShareViewController: UIViewController {
         navigationController?.navigationBar.setValue(true, forKey: "hidesShadow") // hide separator line
         navigationItem.titleView = UIImageView(image: UIImage(named: "Icon-Small"))
         navigationItem.titleView?.contentMode = .scaleAspectFit
-        navigationItem.leftBarButtonItem = UIBarButtonItem(title: Strings.SendTo.CancelButton, style: .plain, target: self, action: #selector(finish))
+        navigationItem.leftBarButtonItem = UIBarButtonItem(title: Strings.General.CancelString, style: .plain, target: self, action: #selector(finish))
         navigationController?.navigationBar.barTintColor = Theme.defaultBackground.color
     }
 

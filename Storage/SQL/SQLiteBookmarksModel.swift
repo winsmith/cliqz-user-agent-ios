@@ -6,7 +6,6 @@ import Foundation
 import Shared
 
 private let log = Logger.syncLogger
-private let desktopBookmarksLabel: String = NSLocalizedString("Desktop Bookmarks", tableName: "BookmarkPanel", comment: "The folder name for the virtual folder that contains all desktop bookmarks.")
 
 public enum Direction {
     case buffer
@@ -298,6 +297,7 @@ extension SQLiteBookmarks {
     public func clearBookmarks() -> Success {
         return self.db.run([
             ("DELETE FROM bookmarksLocal WHERE parentid IS NOT ?", [BookmarkRoots.RootGUID]),
+            self.favicons.getCleanupFaviconsQuery(),
         ])
     }
 

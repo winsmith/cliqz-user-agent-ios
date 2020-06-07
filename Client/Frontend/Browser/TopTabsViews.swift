@@ -4,6 +4,7 @@
 
 import Foundation
 import Shared
+import Storage
 
 struct TopTabsSeparatorUX {
     static let Identifier = "Separator"
@@ -91,9 +92,7 @@ class TopTabCell: UICollectionViewCell {
         return titleText
     }()
 
-    let logoView: LogoView = {
-           LogoView()
-       }()
+    let iconView = IconView()
 
     let closeButton: UIButton = {
         let closeButton = UIButton()
@@ -115,13 +114,13 @@ class TopTabCell: UICollectionViewCell {
 
         contentView.addSubview(titleText)
         contentView.addSubview(closeButton)
-        contentView.addSubview(logoView)
+        contentView.addSubview(iconView)
 
         self.clipsToBounds = true
         self.layer.cornerRadius = 18
         self.closeButton.layer.cornerRadius = self.layer.cornerRadius
 
-        logoView.snp.makeConstraints { make in
+        iconView.snp.makeConstraints { make in
             make.centerY.equalTo(self).offset(TopTabsUX.TabNudge)
             make.size.equalTo(TabTrayControllerUX.FaviconSize)
             make.leading.equalTo(self).offset(self.layer.cornerRadius)
@@ -130,7 +129,7 @@ class TopTabCell: UICollectionViewCell {
             make.centerY.equalTo(self)
             make.height.equalTo(self)
             make.trailing.equalTo(closeButton.snp.leading).offset(TopTabsUX.TabTitlePadding)
-            make.leading.equalTo(logoView.snp.trailing).offset(TopTabsUX.TabTitlePadding)
+            make.leading.equalTo(iconView.snp.trailing).offset(TopTabsUX.TabTitlePadding)
         }
         closeButton.snp.makeConstraints { make in
             make.centerY.equalTo(self).offset(TopTabsUX.TabNudge)
@@ -158,7 +157,11 @@ class TopTabCell: UICollectionViewCell {
         }
 
         self.selectedTab = isSelected
-        self.logoView.url = tab.logoURL.absoluteString
+        if InternalURL.isValid(url: tab.url) || SearchURL.isValid(url: tab.url) || tab.isNewTabPage {
+            self.iconView.getIcon(site: Site(url: Strings.BrandWebsite, title: tab.title ?? ""))
+        } else {
+            self.iconView.setTabIcon(tab: tab)
+        }
     }
 
     required init?(coder aDecoder: NSCoder) {
@@ -193,7 +196,7 @@ class TopTabCell: UICollectionViewCell {
 class TopTabFader: UIView {
     lazy var hMaskLayer: CAGradientLayer = {
         let innerColor: CGColor = UIColor.White.cgColor
-        let outerColor: CGColor = UIColor(white: 1, alpha: 0.0).cgColor
+        let outerColor: CGColor = UIColor.White.withAlphaComponent(0.0).cgColor
         let hMaskLayer = CAGradientLayer()
         hMaskLayer.colors = [outerColor, innerColor, innerColor, outerColor]
         hMaskLayer.locations = [0.00, 0.005, 0.995, 1.0]

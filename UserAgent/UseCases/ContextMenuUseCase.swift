@@ -46,8 +46,7 @@ class ContextMenuUseCase {
         }
         let contextMenu = self.createContextMenu(site: site, with: photonAction)
 
-        let generator = UIImpactFeedbackGenerator(style: .heavy)
-        generator.impactOccurred()
+        HapticFeedback.vibrate()
 
         viewController.present(contextMenu, animated: true, completion: nil)
     }
@@ -146,7 +145,7 @@ class ContextMenuUseCase {
     }
 
     private func createActionOpenInNewPrivateTab(site: Site, actionCompletion: @escaping ContextMenuActionCompletion) -> PhotonActionSheetItem {
-        let actionSheetItem = PhotonActionSheetItem(title: Strings.HomePanel.ContextMenu.OpenInNewPrivateTab, iconString: "forgetMode") { action in
+        let actionSheetItem = PhotonActionSheetItem(title: Strings.ForgetMode.ContextMenu.OpenInNewPrivateTab, iconString: "forgetMode") { action in
             self.openLink.openNewForgetModeTab(url: site.tileURL)
             actionCompletion(.openInNewPrivateTab)
         }

@@ -11,8 +11,7 @@ extension BrowserViewController: TabToolbarDelegate, PhotonActionSheetProtocol {
     }
 
     func tabToolbarDidLongPressBack(_ tabToolbar: TabToolbarProtocol, button: UIButton) {
-        let generator = UIImpactFeedbackGenerator(style: .heavy)
-        generator.impactOccurred()
+        HapticFeedback.vibrate()
         showBackForwardList()
     }
 
@@ -29,8 +28,7 @@ extension BrowserViewController: TabToolbarDelegate, PhotonActionSheetProtocol {
     }
 
     func tabToolbarDidLongPressForward(_ tabToolbar: TabToolbarProtocol, button: UIButton) {
-        let generator = UIImpactFeedbackGenerator(style: .heavy)
-        generator.impactOccurred()
+        HapticFeedback.vibrate()
         showBackForwardList()
     }
 
@@ -63,10 +61,6 @@ extension BrowserViewController: TabToolbarDelegate, PhotonActionSheetProtocol {
         }
     }
 
-    func tabToolbarDidLongPressSearch(_ tabToolbar: TabToolbarProtocol, button: UIButton) {
-        self.showQueriesList(tabToolbar, button: button)
-    }
-
     func tabToolbarDidPressTabs(_ tabToolbar: TabToolbarProtocol, button: UIButton) {
         showTabTray()
     }
@@ -77,10 +71,10 @@ extension BrowserViewController: TabToolbarDelegate, PhotonActionSheetProtocol {
         let infinity = "\u{221E}"
         let tabCount = (count < 100) ? count.description : infinity
 
-        let privateBrowsingMode = PhotonActionSheetItem(title: Strings.Hotkeys.privateBrowsingModeTitle, iconString: "nav-tabcounter", iconType: .TabsButton, tabCount: tabCount) { _ in
+        let privateBrowsingMode = PhotonActionSheetItem(title: Strings.ForgetMode.Hotkeys.PrivateBrowsingModeTitle, iconString: "nav-tabcounter", iconType: .TabsButton, tabCount: tabCount) { _ in
             self.tabManager.switchPrivacyMode()
         }
-        let normalBrowsingMode = PhotonActionSheetItem(title: Strings.Hotkeys.normalBrowsingModeTitle, iconString: "nav-tabcounter", iconType: .TabsButton, tabCount: tabCount) { _ in
+        let normalBrowsingMode = PhotonActionSheetItem(title: Strings.Hotkeys.NormalBrowsingModeTitle, iconString: "nav-tabcounter", iconType: .TabsButton, tabCount: tabCount) { _ in
             self.tabManager.switchPrivacyMode()
         }
 
@@ -117,8 +111,7 @@ extension BrowserViewController: TabToolbarDelegate, PhotonActionSheetProtocol {
         // Force a modal if the menu is being displayed in compact split screen.
         let shouldSuppress = !topTabsVisible && UIDevice.current.isPad
 
-        let generator = UIImpactFeedbackGenerator(style: .heavy)
-        generator.impactOccurred()
+        HapticFeedback.vibrate()
 
         presentSheetWith(actions: actions, on: self, from: button, suppressPopover: shouldSuppress)
     }
@@ -134,21 +127,44 @@ extension BrowserViewController: TabToolbarDelegate, PhotonActionSheetProtocol {
         }
     }
 
-    func showQueriesList(_ tabToolbar: TabToolbarProtocol, button: UIButton) {
-        guard !self.queries.isEmpty else {
-            return
-        }
+    func showQueriesList(_ view: UIView) {
         HapticFeedback.vibrate()
-        let queriesItems = self.getQueriesActions(queries: self.queries, didSelectQuery: { [weak self] (query) in
-            self?.urlBar.enterOverlayMode(query, pasted: false, search: true)
-        }) { [weak self] (query) in
-            self?.queries = self?.queries.filter({ $0 != query }) ?? []
-            if self?.queries.isEmpty ?? false {
-                self?.presentedViewController?.dismiss(animated: true)
-            }
+
+        self.profile.history.getRecentQueries().uponQueue(.main) { cursor in
+            var queries = (cursor.successValue?.asArray() ?? [])
+                .unique { $0 }
+            queries = Array(queries.prefix(5))
+
+            let queriesItems = self.getQueriesActions(
+                queries: queries,
+                didSelectQuery: { [weak self] (query) in
+                    self?.urlBar.enterOverlayMode(query, pasted: false, search: true)
+                },
+                didRemoveQuery: { [weak self] (query) in
+                    _ = self?.profile.history.removeQuery(query)
+                    queries = queries.filter({ $0 != query })
+                    if queries.isEmpty {
+                        self?.presentedViewController?.dismiss(animated: true)
+                    }
+                }
+            )
+
+            let clearQueryLog = PhotonActionSheetItem(
+                title: Strings.Menu.ClearSearchHistory,
+                iconString: "menu-burn",
+                handler: { [weak self] item in
+                    _ = self?.profile.history.clearQueryLog()
+                    self?.presentedViewController?.dismiss(animated: true)
+                }
+            )
+
+            self.presentSheetWith(
+                actions: [queriesItems, [clearQueryLog]],
+                on: self,
+                from: view,
+                suppressPopover: !self.topTabsVisible && UIDevice.current.isPad
+            )
         }
-        let shouldSuppress = !self.topTabsVisible && UIDevice.current.isPad
-        self.presentSheetWith(actions: [queriesItems], on: self, from: button, suppressPopover: shouldSuppress)
     }
 
 }

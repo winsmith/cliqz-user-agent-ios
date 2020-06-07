@@ -20,11 +20,11 @@ class SiriShortcuts {
     }
 
     private var openUrlActivity: NSUserActivity? = {
-        let activity = NSUserActivity(activityType: SiriActivityTypes.openURL.rawValue)
-        activity.title = Strings.Settings.Siri.OpenURL
+        let activity = NSUserActivity(activityType: SiriActivityTypes.openURL.value)
+        activity.title = Strings.Settings.General.Siri.OpenURL
         activity.isEligibleForPrediction = true
-        activity.suggestedInvocationPhrase = Strings.Settings.Siri.OpenURL
-        activity.persistentIdentifier = NSUserActivityPersistentIdentifier(SiriActivityTypes.openURL.rawValue)
+        activity.suggestedInvocationPhrase = Strings.Settings.General.Siri.OpenURL
+        activity.persistentIdentifier = NSUserActivityPersistentIdentifier(SiriActivityTypes.openURL.value)
         return activity
     }()
 
@@ -38,7 +38,7 @@ class SiriShortcuts {
             shortcut = INShortcut(userActivity: activity)
         case .searchWith:
             let intent = SearchWithIntent()
-            intent.suggestedInvocationPhrase = Strings.Settings.Siri.SearchWith + AppInfo.displayName
+            intent.suggestedInvocationPhrase = Strings.Settings.General.Siri.SearchWith + AppInfo.displayName
             guard let intentShortcut = INShortcut(intent: intent) else {
                 return
             }
@@ -62,7 +62,7 @@ class SiriShortcuts {
             DispatchQueue.main.async {
                 guard let voiceShortcuts = voiceShortcuts else { return }
                 let foundShortcut = voiceShortcuts.filter { (attempt) in
-                    attempt.shortcut.userActivity?.activityType == activityType.rawValue
+                    attempt.shortcut.userActivity?.activityType == activityType.value
                     }.first
                 if let foundShortcut = foundShortcut {
                     self.displayEditSiri(for: foundShortcut, in: viewController)

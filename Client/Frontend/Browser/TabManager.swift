@@ -59,9 +59,9 @@ class TabManager: NSObject {
         var title: String {
             switch self {
             case .lastOpenedTab:
-                return Strings.Settings.OnBrowserStartTab.LastOpenedTab
+                return Strings.Settings.General.OnBrowserStartTab.LastOpenedTab
             case .newTab:
-                return Strings.Settings.OnBrowserStartTab.NewTab
+                return Strings.Settings.General.OnBrowserStartTab.NewTab
             }
         }
 
@@ -282,9 +282,9 @@ class TabManager: NSObject {
         }
     }
 
-    func addPopupForParentTab(bvc: BrowserViewController, parentTab: Tab, configuration: WKWebViewConfiguration) -> Tab {
+    func addPopupForParentTab(bvc: BrowserViewController, parentTab: Tab, request: URLRequest, configuration: WKWebViewConfiguration) -> Tab {
         var popup = Tab(bvc: bvc, configuration: configuration, isPrivate: parentTab.isPrivate)
-        popup = configureTab(popup, request: nil, afterTab: parentTab, flushToDisk: true, zombie: false, isPopup: true)
+        popup = configureTab(popup, request: request, afterTab: parentTab, flushToDisk: true, zombie: false, isPopup: true)
 
         // Wait momentarily before selecting the new tab, otherwise the parent tab
         // may be unable to set `window.location` on the popup immediately after
@@ -665,7 +665,7 @@ extension TabManager: WKNavigationDelegate {
     func webView(_ webView: WKWebView, didCommit navigation: WKNavigation!) {
         guard let tab = self[webView] else { return }
 
-        if let tpHelper = tab.contentBlocker, !tpHelper.isPrivacyDashboardEnabled {
+        if let tpHelper = tab.contentBlocker, !tpHelper.isAdBlockingEnabled, !tpHelper.isAntiTrackingEnabled {
             webView.evaluateJavaScript("window.__firefox__.TrackingProtectionStats.setEnabled(false, \(UserScriptManager.securityToken))")
         }
     }

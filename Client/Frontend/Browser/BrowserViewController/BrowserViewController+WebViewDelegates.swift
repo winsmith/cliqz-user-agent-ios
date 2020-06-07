@@ -30,7 +30,7 @@ extension BrowserViewController: WKUIDelegate {
         // If the page uses `window.open()` or `[target="_blank"]`, open the page in a new tab.
         // IMPORTANT!!: WebKit will perform the `URLRequest` automatically!! Attempting to do
         // the request here manually leads to incorrect results!!
-        let newTab = tabManager.addPopupForParentTab(bvc: bvc, parentTab: parentTab, configuration: configuration)
+        let newTab = tabManager.addPopupForParentTab(bvc: bvc, parentTab: parentTab, request: navigationAction.request, configuration: configuration)
 
         return newTab.webView
     }
@@ -100,7 +100,7 @@ extension BrowserViewController: WKUIDelegate {
     @available(iOS 13.0, *)
     func webView(_ webView: WKWebView, contextMenuConfigurationForElement elementInfo: WKContextMenuElementInfo, completionHandler: @escaping (UIContextMenuConfiguration?) -> Void) {
         completionHandler(UIContextMenuConfiguration(identifier: nil, previewProvider: {
-            guard let url = elementInfo.linkURL else { return nil }
+            guard let url = elementInfo.linkURL, self.profile.prefs.boolForKey(PrefsKeys.ContextMenuShowLinkPreviews) ?? true else { return nil }
             let previewViewController = UIViewController()
             previewViewController.view.isUserInteractionEnabled = false
             let clonedWebView = WKWebView(frame: webView.frame, configuration: webView.configuration)
@@ -140,7 +140,7 @@ extension BrowserViewController: WKUIDelegate {
                 })
             }
 
-            actions.append(UIAction(title: Strings.ContextMenuOpenInNewPrivateTab, image: UIImage.templateImageNamed("forgetMode"), identifier: UIAction.Identifier("linkContextMenu.openInNewPrivateTab")) { _ in
+            actions.append(UIAction(title: Strings.ForgetMode.ContextMenu.OpenInNewPrivateTab, image: UIImage.templateImageNamed("forgetMode"), identifier: UIAction.Identifier("linkContextMenu.openInNewPrivateTab")) { _ in
                 addTab(url, true)
             })
 
@@ -151,7 +151,7 @@ extension BrowserViewController: WKUIDelegate {
 
             actions.append(UIAction(title: Strings.ContextMenu.DownloadLink, image: UIImage.templateImageNamed("menu-panel-Downloads"), identifier: UIAction.Identifier("linkContextMenu.download")) {_ in
                 self.pendingDownloadWebView = currentTab.webView
-                currentTab.webView?.evaluateJavaScript("window.__firefox__.download('\(url.absoluteString)', '\(UserScriptManager.securityToken)')")
+                DownloadContentScript.requestDownload(url: url, tab: currentTab)
             })
 
             actions.append(UIAction(title: Strings.ContextMenu.CopyLink, image: UIImage.templateImageNamed("menu-Copy-Link"), identifier: UIAction.Identifier("linkContextMenu.copyLink")) { _ in
@@ -169,22 +169,26 @@ extension BrowserViewController: WKUIDelegate {
                 let photoAuthorizeStatus = PHPhotoLibrary.authorizationStatus()
                 actions.append(UIAction(title: Strings.ContextMenu.SaveImage, identifier: UIAction.Identifier("linkContextMenu.saveImage")) { _ in
                     let handlePhotoLibraryAuthorized = {
-                        getImageData(url) { data in
-                            PHPhotoLibrary.shared().performChanges({
-                                PHAssetCreationRequest.forAsset().addResource(with: .photo, data: data, options: nil)
-                            })
+                        DispatchQueue.main.async {
+                            getImageData(url) { data in
+                                PHPhotoLibrary.shared().performChanges({
+                                    PHAssetCreationRequest.forAsset().addResource(with: .photo, data: data, options: nil)
+                                })
+                            }
                         }
                     }
 
                     let handlePhotoLibraryDenied = {
-                        let accessDenied = UIAlertController(title: Strings.PhotoLibrary.AppWouldLikeAccessTitle, message: Strings.PhotoLibrary.AppWouldLikeAccessMessage, preferredStyle: .alert)
-                        let dismissAction = UIAlertAction(title: Strings.General.CancelString, style: .default, handler: nil)
-                        accessDenied.addAction(dismissAction)
-                        let settingsAction = UIAlertAction(title: Strings.General.OpenSettingsString, style: .default ) { _ in
-                            UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!, options: [:])
+                        DispatchQueue.main.async {
+                            let accessDenied = UIAlertController(title: Strings.PhotoLibrary.AppWouldLikeAccessTitle, message: Strings.PhotoLibrary.AppWouldLikeAccessMessage, preferredStyle: .alert)
+                            let dismissAction = UIAlertAction(title: Strings.General.CancelString, style: .default, handler: nil)
+                            accessDenied.addAction(dismissAction)
+                            let settingsAction = UIAlertAction(title: Strings.General.OpenSettingsString, style: .default ) { _ in
+                                UIApplication.shared.open(URL(string: UIApplication.openSettingsURLString)!, options: [:])
+                            }
+                            accessDenied.addAction(settingsAction)
+                            self.present(accessDenied, animated: true, completion: nil)
                         }
-                        accessDenied.addAction(settingsAction)
-                        self.present(accessDenied, animated: true, completion: nil)
                     }
 
                     if photoAuthorizeStatus == .notDetermined {
@@ -411,10 +415,36 @@ extension BrowserViewController: WKNavigationDelegate {
             return
         }
 
+        // https://blog.mozilla.org/security/2017/11/27/blocking-top-level-navigations-data-urls-firefox-59/
+        if url.scheme == "data" {
+            let url = url.absoluteString
+            // Allow certain image types
+            if url.hasPrefix("data:image/") && !url.hasPrefix("data:image/svg+xml") {
+                decisionHandler(.allow)
+                return
+            }
+
+            // Allow video, and certain application types
+            if url.hasPrefix("data:video/") || url.hasPrefix("data:application/pdf") || url.hasPrefix("data:application/json") {
+                decisionHandler(.allow)
+                return
+            }
+
+            // Allow plain text types.
+            // Note the format of data URLs is `data:[<media type>][;base64],<data>` with empty <media type> indicating plain text.
+            if url.hasPrefix("data:;base64,") || url.hasPrefix("data:,") || url.hasPrefix("data:text/plain,") || url.hasPrefix("data:text/plain;") {
+                decisionHandler(.allow)
+                return
+            }
+
+            decisionHandler(.cancel)
+            return
+        }
+
         // This is the normal case, opening a http or https url, which we handle by loading them in this WKWebView. We
         // always allow this. Additionally, data URIs are also handled just like normal web pages.
 
-        if ["http", "https", "data", "blob", "file"].contains(url.scheme) {
+        if ["http", "https", "blob", "file"].contains(url.scheme) {
             if navigationAction.targetFrame?.isMainFrame ?? false {
                 tab.changedUserAgent = Tab.ChangeUserAgent.contains(url: url)
             }

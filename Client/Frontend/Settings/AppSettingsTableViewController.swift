@@ -17,7 +17,7 @@ class AppSettingsTableViewController: SettingsTableViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
 
-        navigationItem.title = NSLocalizedString("Settings", comment: "Title in the settings view controller title bar")
+        navigationItem.title = Strings.Settings.Title
         navigationItem.rightBarButtonItem?.accessibilityIdentifier = "AppSettingsTableViewController.navigationItem.leftBarButtonItem"
 
         tableView.accessibilityIdentifier = "AppSettingsTableViewController.tableView"
@@ -31,15 +31,21 @@ class AppSettingsTableViewController: SettingsTableViewController {
     }
 
     override func generateSettings() -> [SettingSection] {
-        return [
+        var settings = [
             self.searchSettingSection(),
             self.privacySettingSection(),
-            self.todayWidgetSettingSection(),
+            self.privacyDashboardSettingSection(),
             self.generalSettingSection(),
-            self.newsSettingSection(),
             self.supportSettingSection(),
             self.aboutSettingSection(),
         ]
+        if Features.TodayWidget.isEnabled {
+            settings.insert(self.todayWidgetSettingSection(), at: 3)
+        }
+        if Features.News.isEnabled {
+            settings.insert(self.newsSettingSection(), at: 5)
+        }
+        return settings
     }
 
     override func tableView(_ tableView: UITableView, viewForHeaderInSection section: Int) -> UIView? {
@@ -59,35 +65,56 @@ class AppSettingsTableViewController: SettingsTableViewController {
 
     private func searchSettingSection() -> SettingSection {
         let prefs = self.profile.prefs
-        let searchSettings: [Setting] = [
-            SearchLanguageSetting(currentRegion: self.searchCurrentRegion, availableRegions: self.searchAvailableRegions),
-            BoolSetting(prefs: prefs, defaultValue: self.currentAdultFilterMode == .conservative, titleText: Strings.Settings.AdultFilterMode, enabled: self.currentAdultFilterMode != nil) { (value) in
+        var searchSettings: [Setting] = []
+
+        if Features.Search.QuickSearch.isEnabled {
+            searchSettings.append(SearchLanguageSetting(currentRegion: self.searchCurrentRegion, availableRegions: self.searchAvailableRegions))
+            searchSettings.append(BoolSetting(prefs: prefs, defaultValue: self.currentAdultFilterMode == .conservative, titleText: Strings.Settings.Search.AdultFilterMode, enabled: self.currentAdultFilterMode != nil) { (value) in
                 Search.setAdultFilter(filter: value ? .conservative : .liberal)
-            },
-            SearchSetting(settings: self),
-        ]
-        return SettingSection(title: NSAttributedString(string: Strings.Settings.Search.SectionTitle), children: searchSettings)
+            })
+        }
+        if Features.Search.AdditionalSearchEngines.isEnabled {
+            searchSettings.append(SearchSetting(settings: self))
+        }
+        return SettingSection(title: NSAttributedString(string: Strings.Settings.Search.Title), children: searchSettings)
     }
 
     private func privacySettingSection() -> SettingSection {
         let prefs = self.profile.prefs
-        let privacyTitle = NSLocalizedString("Privacy", comment: "Privacy section title")
-        var privacySettings = [Setting]()
-        privacySettings.append(ClearPrivateDataSetting(settings: self))
-        privacySettings += [
+        let privacyTitle = Strings.Settings.Privacy.Title
+        let privacySettings = [
+            ClearPrivateDataSetting(settings: self),
             BoolSetting(
                 prefs: prefs,
                 prefKey: "settings.closePrivateTabs",
                 defaultValue: false,
-                titleText: Strings.ClosePrivateTabsLabel,
-                statusText: Strings.ClosePrivateTabsDescription),
+                titleText: Strings.Settings.Privacy.ClosePrivateTabs,
+                statusText: Strings.ForgetMode.ClosePrivateTabsDescription),
+        ]
+        return SettingSection(title: NSAttributedString(string: privacyTitle), children: privacySettings)
+    }
+
+    private func privacyDashboardSettingSection() -> SettingSection {
+        let prefs = self.profile.prefs
+        let privacyTitle = Strings.Settings.PrivacyDashboard.Title
+        let privacySettings = [
             BoolSetting(
                 prefs: prefs,
-                defaultValue: FirefoxTabContentBlocker.isPrivacyDashboardEnabled(tabManager: self.tabManager),
-                titleText: Strings.Settings.PrivacyDashboard.Title,
-                statusText: Strings.Settings.PrivacyDashboard.Description,
-                enabled: true) { _ in
-                    FirefoxTabContentBlocker.togglePrivacyDashboardEnabled(prefs: self.profile.prefs, tabManager: self.tabManager)
+                defaultValue: FirefoxTabContentBlocker.isAntiTrackingEnabled(tabManager: self.tabManager),
+                titleText: Strings.Settings.PrivacyDashboard.AntiTrackingTitle) { _ in
+                    FirefoxTabContentBlocker.toggleAntiTrackingEnabled(prefs: self.profile.prefs, tabManager: self.tabManager)
+            },
+            BoolSetting(
+                prefs: prefs,
+                defaultValue: FirefoxTabContentBlocker.isAdBlockingEnabled(tabManager: self.tabManager),
+                titleText: Strings.Settings.PrivacyDashboard.AdBlockingTitle) { _ in
+                    FirefoxTabContentBlocker.toggleAdBlockingEnabled(prefs: self.profile.prefs, tabManager: self.tabManager)
+            },
+            BoolSetting(
+                prefs: prefs,
+                defaultValue: FirefoxTabContentBlocker.isPopupBlockerEnabled(tabManager: self.tabManager),
+                titleText: Strings.Settings.PrivacyDashboard.PopupBlockerTitle) { _ in
+                    FirefoxTabContentBlocker.togglePopupBlockerEnabled(prefs: self.profile.prefs, tabManager: self.tabManager)
             },
         ]
         return SettingSection(title: NSAttributedString(string: privacyTitle), children: privacySettings)
@@ -107,9 +134,9 @@ class AppSettingsTableViewController: SettingsTableViewController {
             NewTabPageDefaultViewSetting(settings: self),
             OnBrowserStartShowSetting(settings: self),
             BoolSetting(prefs: prefs, prefKey: PrefsKeys.RefreshControlEnabled, defaultValue: true,
-                        titleText: Strings.Settings.RefreshControl.SectionName),
+                        titleText: Strings.Settings.General.RefreshControl),
             BoolSetting(prefs: prefs, prefKey: "blockPopups", defaultValue: true,
-                        titleText: NSLocalizedString("Block Pop-up Windows", comment: "Block pop-up windows setting")),
+                        titleText: Strings.Settings.General.BlockPopUpWindows),
         ]
 
         if #available(iOS 12.0, *) {
@@ -121,8 +148,11 @@ class AppSettingsTableViewController: SettingsTableViewController {
         // be changed.
         generalSettings += [
             BoolSetting(prefs: prefs, prefKey: "showClipboardBar", defaultValue: false,
-                        titleText: Strings.Toast.SettingsOfferClipboardBarTitle,
-                        statusText: Strings.Toast.SettingsOfferClipboardBarStatus),
+                        titleText: Strings.Settings.General.OfferClipboardBarTitle,
+                        statusText: Strings.Settings.General.OfferClipboardBarStatus),
+            BoolSetting(prefs: prefs, prefKey: PrefsKeys.ContextMenuShowLinkPreviews, defaultValue: true,
+                        titleText: Strings.Settings.General.ShowLinkPreviewsTitle,
+                        statusText: Strings.Settings.General.ShowLinkPreviewsStatus),
         ]
         return SettingSection(title: NSAttributedString(string: Strings.Settings.General.SectionTitle), children: generalSettings)
     }
@@ -158,14 +188,19 @@ class AppSettingsTableViewController: SettingsTableViewController {
 
     private func supportSettingSection() -> SettingSection {
         let prefs = self.profile.prefs
-        let supportSettigns = [
-            ShowIntroductionSetting(settings: self),
+        var supportSettigns = [
             SendFeedbackSetting(),
             HumanWebSetting(prefs: prefs),
-            TelemetrySetting(prefs: prefs, attributedStatusText: NSAttributedString(string: Strings.Settings.SendUsage.Message, attributes: [NSAttributedString.Key.foregroundColor: Theme.tableView.headerTextLight])),
             PrivacyPolicySetting(),
         ]
-        return SettingSection(title: NSAttributedString(string: NSLocalizedString("Support", comment: "Support section title")), children: supportSettigns)
+        if Onboarding.isEnabled {
+            supportSettigns.insert(ShowIntroductionSetting(settings: self), at: 0)
+        }
+        if Features.Telemetry.isEnabled {
+            let telemetrySetting = TelemetrySetting(prefs: prefs, attributedStatusText: NSAttributedString(string: Strings.Settings.Support.SendUsageStatus, attributes: [NSAttributedString.Key.foregroundColor: Theme.tableView.headerTextLight]))
+            supportSettigns.insert(telemetrySetting, at: (2 + (Onboarding.isEnabled ? 1 : 0)))
+        }
+        return SettingSection(title: NSAttributedString(string: Strings.Settings.Support.SectionTitle), children: supportSettigns)
     }
 
     private func aboutSettingSection() -> SettingSection {
@@ -179,7 +214,7 @@ class AppSettingsTableViewController: SettingsTableViewController {
             SlowTheDatabase(settings: self),
             SentryIDSetting(settings: self),
         ]
-        return SettingSection(title: NSAttributedString(string: NSLocalizedString("About", comment: "About settings section title")), children: aboutSettings)
+        return SettingSection(title: NSAttributedString(string: Strings.Settings.About.SectionTitle), children: aboutSettings)
     }
 
     // MARK: - Private methods

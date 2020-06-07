@@ -9,6 +9,7 @@
 import UIKit
 import NotificationCenter
 import React
+import Shared
 
 @objc(TodayViewController)
 class TodayViewController: UIViewController, NCWidgetProviding {
@@ -59,7 +60,7 @@ class TodayViewController: UIViewController, NCWidgetProviding {
         if #available(iOS 13.0, *) {
             mode = self.traitCollection.userInterfaceStyle == .dark ? "dark" : "light"
         }
-        let textColor = mode == "dark" ? "rgba(255, 255, 255, 0.61)" : "rgba(0, 0, 0, 0.61)"
+        let textColor = mode == "dark" ? UIColor.white.withAlphaComponent(0.61).hexString : UIColor.black.withAlphaComponent(0.61).hexString
         return [
             "textColor": textColor,
             "descriptionColor": textColor,
@@ -73,10 +74,10 @@ class TodayViewController: UIViewController, NCWidgetProviding {
 
     private func getTranslations() -> [String: String] {
         return [
-            "reload": NSLocalizedString("reload", tableName: "Today", comment: "Reload weather data"),
-            "configure": NSLocalizedString("configure", tableName: "Today", comment: "Configure weather widget"),
-            "expand": NSLocalizedString("expand", tableName: "Today", comment: "Show more info"),
-            "collapse": NSLocalizedString("collapse", tableName: "Today", comment: "Show less info"),
+            "reload": Strings.Today.Reload,
+            "configure": Strings.Today.Configure,
+            "expand": Strings.Today.Expand,
+            "collapse": Strings.Today.Collapse,
         ]
     }
 
